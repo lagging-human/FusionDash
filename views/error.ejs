@@ -1,0 +1,16 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('./components/header') %>
+<body class="h-full" style="font-family: 'Space Grotesk'">
+  <div class="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
+      <p class="text-6xl font-semibold text-zinc-700">!</p>
+      <h2 class="mt-4 text-xl font-medium text-white">Something went wrong</h2>
+      <p class="mt-2 text-sm text-zinc-500"><%= message %></p>
+      <a href="/dashboard" class="mt-8 inline-block rounded-full bg-blue-400/10 px-6 py-2 text-sm font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">
+        &larr; Back to Dashboard
+      </a>
+    </div>
+  </div>
+</body>
+</html>

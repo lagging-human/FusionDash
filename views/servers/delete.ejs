@@ -1,0 +1,89 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('../components/header') %>
+<body class="h-full" style="font-family: 'Space Grotesk'">
+<div>
+  <%- include('../components/sidebar', { activePage: 'dashboard' }) %>
+  <main class="lg:pl-64">
+
+    <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
+      <div>
+        <h1 class="text-base font-semibold text-white">Delete Server</h1>
+        <p class="mt-1 text-xs text-zinc-400">This action is permanent and cannot be undone.</p>
+      </div>
+      <a href="/dashboard" class="text-xs text-zinc-500 hover:text-zinc-300 transition">&larr; Cancel</a>
+    </div>
+
+    <div class="p-8 max-w-lg space-y-5">
+
+      <!-- Server info card -->
+      <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-5">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-sm font-medium text-white"><%= server.name %></p>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium
+            <%= server.plan === 'free' ? 'bg-zinc-400/10 text-zinc-400 ring-1 ring-inset ring-zinc-400/20' : 'bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/20' %>">
+            <%= server.plan.charAt(0).toUpperCase() + server.plan.slice(1) %>
+          </span>
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+          <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
+          <span class="text-zinc-700">/</span>
+          <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
+          <span class="text-zinc-700">/</span>
+          <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
+        </div>
+      </div>
+
+      <% if (blockReason) { %>
+      <!-- Subscription lock -->
+      <div class="rounded-2xl border border-amber-400/10 bg-amber-400/5 p-5">
+        <div class="flex gap-x-3">
+          <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" />
+          </svg>
+          <div>
+            <p class="text-sm font-medium text-amber-400">Deletion locked</p>
+            <p class="text-xs text-amber-400/70 mt-1"><%= blockReason %></p>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-x-3">
+          <form action="/servers/<%= server.id %>/cancel-subscription" method="POST">
+            <button type="submit" onclick="return confirm('Cancel your subscription? The server stays active until the billing cycle ends, then you can delete it.')"
+              class="rounded-full bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-400/20 hover:bg-amber-400/20 transition">
+              Cancel Subscription First
+            </button>
+          </form>
+          <a href="/dashboard" class="rounded-full bg-zinc-600/20 px-4 py-2 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/30 hover:bg-zinc-600/30 transition">Keep Server</a>
+        </div>
+      </div>
+
+      <% } else { %>
+      <!-- Danger warning -->
+      <div class="rounded-2xl border border-red-400/10 bg-red-400/5 p-5">
+        <div class="flex gap-x-3">
+          <svg class="h-5 w-5 text-red-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+          </svg>
+          <div>
+            <p class="text-sm font-medium text-red-400">All files, databases, and backups will be destroyed.</p>
+            <p class="text-xs text-red-400/70 mt-1">There is no way to recover this server once deleted.</p>
+          </div>
+        </div>
+      </div>
+
+      <form action="/servers/<%= server.id %>/delete" method="POST" class="flex items-center gap-x-3">
+        <button type="submit"
+          class="rounded-full bg-red-400/10 px-6 py-2 text-sm font-medium text-red-400 ring-1 ring-inset ring-red-400/20 hover:bg-red-400/20 transition">
+          Yes, delete permanently
+        </button>
+        <a href="/dashboard" class="rounded-full bg-zinc-600/20 px-6 py-2 text-sm font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/30 hover:bg-zinc-600/30 transition">
+          Cancel
+        </a>
+      </form>
+      <% } %>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

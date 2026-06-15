@@ -1,0 +1,359 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('../components/header') %>
+<body class="h-full" style="font-family:'Space Grotesk'">
+<div>
+  <%- include('../components/sidebar', { activePage:'admin' }) %>
+  <main class="lg:pl-64">
+
+    <% if (error) { %>
+    <div class="border border-amber-400/10 bg-amber-400/5 p-4 flex gap-x-3">
+      <svg class="h-5 w-5 text-amber-400 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      <p class="text-sm text-amber-400"><%= error %></p>
+    </div>
+    <% } %>
+    <% if (success) { %>
+    <div class="border border-green-400/10 bg-green-400/5 p-4 flex gap-x-3">
+      <svg class="h-5 w-5 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+      <p class="text-sm text-green-400"><%= success %></p>
+    </div>
+    <% } %>
+
+    <!-- Page header -->
+    <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
+      <div>
+        <h1 class="text-base font-semibold text-white">Admin Panel</h1>
+        <p class="mt-1 text-xs text-zinc-400">Manage settings, users, servers, store, and billing.</p>
+      </div>
+      <form action="/admin/update" method="POST">
+        <button type="submit" class="rounded-full bg-zinc-600/20 px-4 py-2 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-zinc-600/30 transition">
+          Check for Updates
+        </button>
+      </form>
+    </div>
+
+    <div class="px-4 sm:px-6 lg:px-8 py-8 space-y-10 pb-20">
+
+      <!-- ── Default Resource Pool ──────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-1">Default Resource Pool</h2>
+        <p class="text-xs text-zinc-500 mb-4">Resources every new user receives on first login. Existing users are not affected.</p>
+        <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-6">
+          <form action="/admin/settings/defaults" method="POST" class="space-y-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <% [
+                ['default_memory','RAM (MB)'],['default_disk','Disk (MB)'],['default_cpu','CPU (%)'],
+                ['default_ports','Ports'],['default_databases','Databases'],['default_backups','Backups']
+              ].forEach(([k,l]) => { %>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+                <input type="number" name="<%= k %>" value="<%= settings[k] || '' %>"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <% }) %>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2 border-t border-white/5">
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Daily Coin Reward</label>
+                <input type="number" name="daily_coins" value="<%= settings.daily_coins || 50 %>"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Work.ink Coin Reward</label>
+                <input type="number" name="workink_coins" value="<%= settings.workink_coins || 20 %>"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Work.ink API Key</label>
+                <input type="text" name="workink_api_key" value="<%= settings.workink_api_key || '' %>" placeholder="Your API secret"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Work.ink Offer ID</label>
+                <input type="text" name="workink_offer_id" value="<%= settings.workink_offer_id || '' %>" placeholder="e.g. abc123"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Dashboard URL (used in server description)</label>
+                <input type="text" name="dashboard_url" value="<%= settings.dashboard_url || '' %>" placeholder="https://your-domain.com"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+            </div>
+
+            <button type="submit" class="rounded-full bg-blue-400/10 px-6 py-2 text-sm font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Save Settings</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ── Plans ─────────────────────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-1">Plans</h2>
+        <p class="text-xs text-zinc-500 mb-4">Edit pricing and resource limits for paid plans.</p>
+        <div class="space-y-4">
+          <% plans.forEach(plan => { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-5">
+            <p class="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wide">Plan: <code class="text-zinc-300"><%= plan.key %></code></p>
+            <form action="/admin/plans/<%= plan.key %>" method="POST">
+              <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-3">
+                <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],['databases','DBs','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
+                <div>
+                  <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+                  <input type="<%= t %>" name="<%= k %>" value="<%= plan[k] %>"
+                    class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                </div>
+                <% }) %>
+              </div>
+              <div class="flex items-center gap-x-4">
+                <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer">
+                  <input type="checkbox" name="active" <%= plan.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
+                  Active
+                </label>
+                <button type="submit" class="rounded-full bg-blue-400/10 px-5 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Save</button>
+              </div>
+            </form>
+          </div>
+          <% }) %>
+        </div>
+      </section>
+
+      <!-- ── Store Items ────────────────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-1">Store Items</h2>
+        <p class="text-xs text-zinc-500 mb-4">Resources users can buy with coins. Amounts are added directly to their resource pool.</p>
+
+        <!-- Add new item -->
+        <div class="rounded-2xl bg-zinc-600/10 border border-blue-400/10 p-5 mb-4">
+          <p class="text-xs font-semibold text-blue-400 mb-3 uppercase tracking-wide">+ Add New Item</p>
+          <form action="/admin/store/new" method="POST">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Key (unique)</label>
+                <input type="text" name="key" placeholder="ram_4gb"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Name</label>
+                <input type="text" name="name" placeholder="4 GB RAM"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Resource</label>
+                <select name="resource" class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                  <option value="memory">memory</option>
+                  <option value="disk">disk</option>
+                  <option value="cpu">cpu</option>
+                  <option value="ports">ports</option>
+                  <option value="databases">databases</option>
+                  <option value="backups">backups</option>
+                  <option value="coins">coins</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Amount</label>
+                <input type="number" name="amount" placeholder="4096"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Cost (coins)</label>
+                <input type="number" name="cost" placeholder="25"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Description</label>
+                <input type="text" name="description" placeholder="Add 4 GB RAM"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              </div>
+            </div>
+            <button type="submit" class="rounded-full bg-blue-400/10 px-5 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Create Item</button>
+          </form>
+        </div>
+
+        <!-- Existing items -->
+        <div class="space-y-3">
+          <% storeItems.forEach(item => { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-4">
+            <form action="/admin/store/<%= item.key %>" method="POST">
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
+                <div>
+                  <label class="block text-xs text-zinc-500 mb-1">Key</label>
+                  <p class="text-sm text-zinc-400 py-2 pl-2 font-mono"><%= item.key %></p>
+                </div>
+                <% [['name','Name','text'],['description','Description','text'],['resource','Resource','text'],['amount','Amount','number'],['cost','Cost (coins)','number']].forEach(([k,l,t]) => { %>
+                <div>
+                  <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+                  <input type="<%= t %>" name="<%= k %>" value="<%= item[k] %>"
+                    class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                </div>
+                <% }) %>
+              </div>
+              <div class="flex items-center gap-x-4">
+                <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer">
+                  <input type="checkbox" name="active" <%= item.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
+                  Active
+                </label>
+                <button type="submit" class="rounded-full bg-blue-400/10 px-5 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Save</button>
+              </div>
+            </form>
+          </div>
+          <% }) %>
+        </div>
+      </section>
+
+      <!-- ── All Servers ────────────────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-1">All Servers</h2>
+        <p class="text-xs text-zinc-500 mb-4">Edit specs or delete any server. Changes apply to the panel immediately.</p>
+        <div class="space-y-4">
+          <% servers.forEach(server => { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <p class="text-sm font-medium text-white"><%= server.name %></p>
+                <p class="text-xs text-zinc-500 mt-0.5"><%= server.username %> &middot; <%= server.email %> &middot;
+                  <span class="<%= server.plan === 'free' ? 'text-zinc-400' : 'text-blue-400' %>"><%= server.plan %></span>
+                  <% if (server.subscription_active === 1) { %><span class="text-green-400 ml-1">(active sub)</span><% } %>
+                  <% if (server.subscription_active === 2) { %><span class="text-amber-400 ml-1">(cancelled)</span><% } %>
+                </p>
+              </div>
+              <form action="/admin/servers/<%= server.id %>/delete" method="POST" onsubmit="return confirm('Permanently delete this server?')">
+                <button type="submit" class="rounded-full bg-red-400/5 px-4 py-1.5 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-400/10 hover:bg-red-400/10 transition">Delete</button>
+              </form>
+            </div>
+            <form action="/admin/servers/<%= server.id %>/specs" method="POST" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <% [['memory','RAM (MB)'],['disk','Disk (MB)'],['cpu','CPU (%)'],['databases','DBs'],['backups','Backups']].forEach(([k,l]) => { %>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+                <input type="number" name="<%= k %>" value="<%= server[k] %>"
+                  class="block w-full rounded-full border-none py-2 pl-4 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-sm">
+              </div>
+              <% }) %>
+              <div class="sm:col-span-5 mt-1">
+                <button type="submit" class="rounded-full bg-blue-400/10 px-5 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Update Specs</button>
+              </div>
+            </form>
+          </div>
+          <% }) %>
+          <% if (!servers.length) { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-6 text-center">
+            <p class="text-sm text-zinc-500">No servers yet.</p>
+          </div>
+          <% } %>
+        </div>
+      </section>
+
+      <!-- ── Transactions ───────────────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-4">Recent Transactions</h2>
+        <div class="rounded-2xl bg-zinc-600/10 border border-white/5 overflow-x-auto">
+          <table class="w-full text-left text-sm min-w-[600px]">
+            <thead class="border-b border-white/5 text-xs text-zinc-500">
+              <tr>
+                <th class="py-3 pl-5 pr-4 font-medium">User</th>
+                <th class="py-3 pr-4 font-medium">Plan</th>
+                <th class="py-3 pr-4 font-medium">Gateway</th>
+                <th class="py-3 pr-4 font-medium">Amount</th>
+                <th class="py-3 pr-4 font-medium">Type</th>
+                <th class="py-3 pr-4 font-medium">Status</th>
+                <th class="py-3 pr-5 font-medium">Date</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              <% transactions.forEach(t => { %>
+              <tr>
+                <td class="py-3 pl-5 pr-4 text-zinc-300 text-xs"><%= t.username %></td>
+                <td class="py-3 pr-4 text-zinc-400 capitalize text-xs"><%= t.plan_key %></td>
+                <td class="py-3 pr-4 text-zinc-400 capitalize text-xs"><%= t.gateway %></td>
+                <td class="py-3 pr-4 text-white text-xs"><%= t.currency==='INR'?'₹':'$' %><%= Number(t.amount).toFixed(2) %></td>
+                <td class="py-3 pr-4 text-zinc-500 capitalize text-xs"><%= t.type %></td>
+                <td class="py-3 pr-4 text-xs">
+                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                    <%= t.status==='paid'?'bg-green-400/10 text-green-400':t.status==='failed'?'bg-red-400/10 text-red-400':'bg-zinc-400/10 text-zinc-400' %>">
+                    <%= t.status %>
+                  </span>
+                </td>
+                <td class="py-3 pr-5 text-zinc-500 text-xs"><%= new Date(t.created_at).toLocaleDateString('en-IN') %></td>
+              </tr>
+              <% }) %>
+              <% if (!transactions.length) { %>
+              <tr><td colspan="7" class="py-6 text-center text-zinc-500 text-sm">No transactions yet.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Users ─────────────────────────────────────────────── -->
+      <section>
+        <h2 class="text-sm font-semibold text-zinc-300 mb-4">All Users</h2>
+        <div class="space-y-3">
+          <% users.forEach(u => { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-5">
+            <div class="flex items-center gap-x-4 mb-4">
+              <% if (u.avatar) { %>
+                <img src="<%= u.avatar %>" class="h-9 w-9 rounded-full" alt="">
+              <% } else { %>
+                <div class="h-9 w-9 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-300">
+                  <%= u.username ? u.username[0].toUpperCase() : '?' %>
+                </div>
+              <% } %>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-white truncate"><%= u.username %></p>
+                <p class="text-xs text-zinc-500 truncate"><%= u.email %> &middot; via <%= u.provider %> &middot; Panel ID: <%= u.pterodactyl_user_id||'—' %></p>
+              </div>
+              <div class="flex items-center gap-x-1.5 text-xs text-yellow-400 shrink-0">
+                <span>🪙</span><span class="font-semibold"><%= u.coins %></span>
+              </div>
+            </div>
+
+            <!-- Resource pool editor -->
+            <div class="mb-4">
+              <p class="text-xs text-zinc-500 mb-2">Resource Pool</p>
+              <form action="/admin/users/<%= u.id %>/set-resources" method="POST" class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <% [['res_memory','RAM (MB)'],['res_disk','Disk (MB)'],['res_cpu','CPU (%)'],['res_ports','Ports'],['res_databases','DBs'],['res_backups','Backups']].forEach(([k,l]) => { %>
+                <div>
+                  <label class="block text-xs text-zinc-600 mb-1"><%= l %></label>
+                  <input type="number" name="<%= k %>" value="<%= u[k] %>"
+                    class="block w-full rounded-full border-none py-1.5 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-xs focus:ring-blue-400">
+                </div>
+                <% }) %>
+                <div class="col-span-3 sm:col-span-6 mt-1">
+                  <button type="submit" class="rounded-full bg-zinc-600/30 px-5 py-1.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/40 hover:bg-zinc-600/50 transition">Update Resources</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Coin gift + admin toggle -->
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 border-t border-white/5">
+              <form action="/admin/users/<%= u.id %>/gift-coins" method="POST" class="flex items-center gap-x-2">
+                <input type="number" name="amount" placeholder="Coins" min="1" value="100"
+                  class="w-24 rounded-full border-none py-1.5 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-xs focus:ring-yellow-400">
+                <button type="submit" class="rounded-full bg-yellow-400/10 px-4 py-1.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-400/20 hover:bg-yellow-400/20 transition">Gift Coins</button>
+              </form>
+              <form action="/admin/users/<%= u.id %>/toggle-admin" method="POST">
+                <button type="submit" class="rounded-full bg-zinc-600/20 px-4 py-1.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/30 hover:bg-zinc-600/40 transition">
+                  <%= u.is_admin ? 'Revoke Admin' : 'Make Admin' %>
+                </button>
+              </form>
+              <% if (u.is_admin) { %>
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/20">Admin</span>
+              <% } %>
+            </div>
+          </div>
+          <% }) %>
+          <% if (!users.length) { %>
+          <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-6 text-center">
+            <p class="text-sm text-zinc-500">No users yet.</p>
+          </div>
+          <% } %>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

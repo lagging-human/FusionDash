@@ -1,0 +1,91 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('../components/header') %>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<body class="h-full" style="font-family: 'Space Grotesk'">
+<div>
+  <%- include('../components/sidebar', { activePage: 'dashboard' }) %>
+  <main class="lg:pl-64">
+
+    <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
+      <div>
+        <h1 class="text-base font-semibold text-white">Pay with UPI / Razorpay</h1>
+        <p class="mt-1 text-xs text-zinc-400"><%= plan.name %> Plan — ₹<%= (order.amount / 100).toFixed(2) %></p>
+      </div>
+      <a href="/dashboard" class="text-xs text-zinc-500 hover:text-zinc-300 transition">&larr; Cancel</a>
+    </div>
+
+    <div class="p-8 max-w-md">
+      <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-6 mb-6">
+        <p class="text-sm font-semibold text-white mb-1"><%= plan.name %> Plan</p>
+        <p class="text-3xl font-semibold text-white mt-2">₹<%= (order.amount / 100).toFixed(2) %></p>
+        <p class="text-xs text-zinc-500 mt-1">Billed once via Razorpay</p>
+      </div>
+
+      <div id="messageBox" class="hidden mb-4 border rounded-2xl p-4 text-sm"></div>
+
+      <button id="payBtn" onclick="openCheckout()"
+        class="w-full rounded-full bg-blue-400/10 px-6 py-3 text-sm font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">
+        Open Payment Window
+      </button>
+      <p class="text-xs text-zinc-600 mt-3 text-center">A secure Razorpay modal will open. You can pay via UPI, card, or netbanking.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+  function showMessage(text, isError) {
+    const box = document.getElementById('messageBox');
+    box.className = isError
+      ? 'mb-4 border border-amber-400/10 bg-amber-400/5 rounded-2xl p-4 text-sm text-amber-400'
+      : 'mb-4 border border-green-400/10 bg-green-400/5 rounded-2xl p-4 text-sm text-green-400';
+    box.textContent = text;
+    box.classList.remove('hidden');
+  }
+
+  function openCheckout() {
+    const options = {
+      key: "<%= keyId %>",
+      amount: <%= order.amount %>,
+      currency: "<%= order.currency %>",
+      name: "Game Hosting Panel",
+      description: "<%= plan.name %> Plan",
+      order_id: "<%= order.id %>",
+      prefill: { name: "<%= user.username %>", email: "<%= user.email || '' %>" },
+      theme: { color: "#4f6df5" },
+      handler: async function(response) {
+        showMessage('Verifying payment…', false);
+        document.getElementById('payBtn').disabled = true;
+        try {
+          const res = await fetch('/checkout/razorpay/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            showMessage('Payment verified! Redirecting…', false);
+            setTimeout(() => window.location.href = data.redirect, 800);
+          } else {
+            showMessage(data.error || 'Verification failed. Contact support with order ID: <%= order.id %>', true);
+            document.getElementById('payBtn').disabled = false;
+          }
+        } catch(e) {
+          showMessage('Network error during verification. Contact support with order ID: <%= order.id %>', true);
+          document.getElementById('payBtn').disabled = false;
+        }
+      },
+      modal: { ondismiss: () => showMessage('Payment cancelled.', true) }
+    };
+    new Razorpay(options).open();
+  }
+
+  // Auto-open on load
+  window.addEventListener('load', openCheckout);
+</script>
+</body>
+</html>

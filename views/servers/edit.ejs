@@ -1,0 +1,71 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('../components/header') %>
+<body class="h-full" style="font-family: 'Space Grotesk'">
+<div>
+  <%- include('../components/sidebar', { activePage: 'dashboard' }) %>
+  <main class="lg:pl-64">
+
+    <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
+      <div>
+        <h1 class="text-base font-semibold text-white">Edit Server</h1>
+        <p class="mt-1 text-xs text-zinc-400">Rename your server. Resource specs are managed by an admin.</p>
+      </div>
+      <a href="/dashboard" class="text-xs text-zinc-500 hover:text-zinc-300 transition">&larr; Back</a>
+    </div>
+
+    <% if (error) { %>
+    <div class="border border-amber-400/10 bg-amber-400/5 p-4">
+      <p class="text-sm text-amber-400 ml-3"><%= error %></p>
+    </div>
+    <% } %>
+
+    <div class="p-8 max-w-lg">
+      <!-- Current specs card -->
+      <div class="rounded-2xl bg-zinc-600/10 border border-white/5 p-5 mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm font-medium text-white"><%= server.name %></span>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium
+            <%= server.plan === 'free' ? 'bg-zinc-400/10 text-zinc-400 ring-1 ring-inset ring-zinc-400/20' : 'bg-blue-400/10 text-blue-400 ring-1 ring-inset ring-blue-400/20' %>">
+            <%= server.plan.charAt(0).toUpperCase() + server.plan.slice(1) %>
+          </span>
+        </div>
+        <div class="flex gap-x-4 text-xs text-zinc-500">
+          <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
+          <span class="text-zinc-700">/</span>
+          <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
+          <span class="text-zinc-700">/</span>
+          <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
+          <span class="text-zinc-700">/</span>
+          <span><%= server.databases %> DBs</span>
+        </div>
+      </div>
+
+      <label class="block text-sm font-normal leading-6 text-zinc-400 mb-2">Server name</label>
+      <input type="text" id="newName" value="<%= server.name %>" maxlength="60"
+        class="block w-full rounded-full border-none py-3 pl-6 bg-zinc-600/20 text-white ring-1 ring-inset ring-zinc-600/30 placeholder:text-zinc-500 focus:ring-1 focus:ring-inset focus:ring-blue-400 transition sm:text-sm sm:leading-6">
+
+      <div class="mt-6 flex items-center gap-x-3">
+        <button onclick="saveEdit()" class="rounded-full bg-blue-400/10 px-6 py-2 text-sm font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Save changes</button>
+        <a href="/servers/<%= server.id %>/delete" class="rounded-full bg-red-400/5 px-6 py-2 text-sm font-medium text-red-400 ring-1 ring-inset ring-red-400/10 hover:bg-red-400/10 transition">Delete server</a>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  function saveEdit() {
+    const name = document.getElementById('newName').value.trim();
+    if (!name) { alert('Server name cannot be empty.'); return; }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/servers/<%= server.id %>/edit';
+    const input = document.createElement('input');
+    input.type = 'hidden'; input.name = 'name'; input.value = name;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<!doctype html>
+<html class="h-full bg-[#0f1012]">
+<%- include('./components/header') %>
+<body class="h-full" style="font-family: 'Space Grotesk'">
+  <% if (user) { %>
+    <script>window.location.href='/dashboard';</script>
+  <% } else { %>
+    <script>window.location.href='/login';</script>
+  <% } %>
+</body>
+</html>
