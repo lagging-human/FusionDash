@@ -25,14 +25,18 @@ async function syncPanelUser(localId, email, username) {
 
   const user = getUserStmt.get(localId);
 
+  // If we have a stored panel user id, verify it still exists on the panel.
+  // If the admin deleted it manually, this 404s — we catch that and fall through
+  // to re-create below.
   if (user?.pterodactyl_user_id) {
     try {
       const full = await getPanelUser(user.pterodactyl_user_id);
       const isAdmin = full.attributes.root_admin ? 1 : 0;
       setPanelLinkStmt.run(user.pterodactyl_user_id, isAdmin, localId);
-      return;
+      return; // still exists — all good
     } catch (err) {
       if (err.response?.status === 404) {
+        // Panel user was deleted — clear the stale link and re-create below
         console.log(`Panel user ${user.pterodactyl_user_id} not found, re-creating for ${email}`);
         clearPanelLinkStmt.run(localId);
       } else {
@@ -42,6 +46,7 @@ async function syncPanelUser(localId, email, username) {
     }
   }
 
+  // No panel user linked (or was just cleared) — find or create one
   try {
     const panelUser = await findOrCreatePanelUser({ email, username });
     const panelUserId = panelUser.attributes.id;

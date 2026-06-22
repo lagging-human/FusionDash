@@ -1,143 +1,143 @@
 <!doctype html>
-<html class="h-full bg-[#0f1012]">
+<html lang="en">
 <%- include('./components/header') %>
-<body class="h-full" style="font-family:'Space Grotesk'">
-<div>
-  <%- include('./components/sidebar', { activePage:'dashboard' }) %>
-  <main class="lg:pl-64">
+<body>
+<%- include('./components/sidebar', { activePage:'dashboard' }) %>
 
-    <% if (error) { %>
-    <div class="border border-amber-400/10 bg-amber-400/5 p-4 flex gap-x-3">
-      <svg class="h-5 w-5 text-amber-400 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
-      <p class="text-sm text-amber-400"><%= error %></p>
-    </div>
-    <% } %>
-    <% if (success) { %>
-    <div class="border border-green-400/10 bg-green-400/5 p-4 flex gap-x-3">
-      <svg class="h-5 w-5 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-      <p class="text-sm text-green-400"><%= success %></p>
-    </div>
-    <% } %>
+<div class="app-main">
 
-    <!-- Page header -->
-    <div class="flex flex-col items-start justify-between gap-4 bg-zinc-700/10 px-4 py-4 sm:flex-row sm:items-center sm:px-6 lg:px-8 border-b border-white/5">
-      <div>
-        <h1 class="flex items-center gap-x-2 text-base font-semibold text-white">
-          <span class="text-zinc-400"><%= user.username %></span>
-          <span class="text-zinc-700">/</span>
-          <span>Servers</span>
-        </h1>
-        <p class="mt-1 text-xs text-zinc-400">Manage your game servers and resource pool.</p>
-      </div>
-      <a href="/servers/create"
-        class="rounded-full bg-blue-400/10 px-5 py-2 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">
-        + New Server
-      </a>
-    </div>
+  <!-- Alerts -->
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
 
-    <!-- Resource Pool Meters -->
-    <div class="bg-zinc-700/10 border-b border-white/5 px-4 sm:px-6 lg:px-8 py-5">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Resource Pool</h2>
-        <div class="flex items-center gap-x-3">
-          <a href="/store" class="text-xs text-blue-400 hover:underline">Buy more →</a>
-          <div class="flex items-center gap-x-1 text-xs text-yellow-400">🪙 <%= user.coins %></div>
+  <!-- Page header -->
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-medium"><%= user.username %></span> / Servers</p>
+      <p class="text-xs text-zinc-600 mt-0.5">Manage your game servers and resource pool.</p>
+    </div>
+    <a href="/servers/create" class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-500/15 px-4 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+      New Server
+    </a>
+  </div>
+
+  <!-- Resource Pool -->
+  <div class="px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06]">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <p class="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest">Resource Pool</p>
+      <div class="flex items-center gap-x-3">
+        <a href="/store" class="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium">Buy more →</a>
+        <div class="flex items-center gap-x-1.5 rounded-full bg-yellow-400/10 px-3 py-1 ring-1 ring-inset ring-yellow-400/20">
+          <%- icon('coin', 'h-4 w-4 text-yellow-400') %>
+          <span class="text-xs font-semibold text-yellow-400"><%= user.coins %></span>
         </div>
       </div>
-      <%
-        const meters = [
-          { label:'RAM',   used:user.used_memory,    total:user.res_memory,    unit:'MB' },
-          { label:'Disk',  used:user.used_disk,      total:user.res_disk,      unit:'MB' },
-          { label:'CPU',   used:user.used_cpu,       total:user.res_cpu,       unit:'%'  },
-          { label:'Ports', used:user.used_ports,     total:user.res_ports,     unit:''   },
-          { label:'DBs',   used:user.used_databases, total:user.res_databases, unit:''   },
-        ];
+    </div>
+    <%
+      const meters = [
+        { label:'RAM',   used:user.used_memory,    total:user.res_memory,    fmt: v => (v/1024).toFixed(1)+' GiB' },
+        { label:'Disk',  used:user.used_disk,      total:user.res_disk,      fmt: v => (v/1024).toFixed(1)+' GiB' },
+        { label:'CPU',   used:user.used_cpu,       total:user.res_cpu,       fmt: v => v+'%' },
+        { label:'Ports', used:user.used_ports,     total:user.res_ports,     fmt: v => v+'' },
+        { label:'DBs',   used:user.used_databases, total:user.res_databases, fmt: v => v+'' },
+        { label:'Backups',used:user.used_backups,  total:user.res_backups,   fmt: v => v+'' },
+      ];
+    %>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <% meters.forEach(m => {
+        const pct = m.total > 0 ? Math.min(100, (m.used / m.total) * 100) : 0;
+        const barColor = pct >= 100 ? '#ef4444' : pct > 75 ? '#f59e0b' : '#3b82f6';
       %>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <% meters.forEach(m => {
-          const pct = m.total > 0 ? Math.min(100, Math.round((m.used/m.total)*100)) : 0;
-          const color = pct > 85 ? 'bg-red-400/60' : pct > 60 ? 'bg-amber-400/60' : 'bg-blue-400/60';
-        %>
-        <div>
-          <div class="flex justify-between text-xs text-zinc-400 mb-1">
-            <span><%= m.label %></span>
-            <span class="text-white"><%= m.used %><%= m.unit %> / <%= m.total %><%= m.unit %></span>
-          </div>
-          <div class="h-1.5 w-full rounded-full bg-zinc-800">
-            <div class="h-1.5 rounded-full <%= color %> transition-all" style="width:<%= pct %>%"></div>
-          </div>
+      <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] font-semibold text-zinc-500 uppercase tracking-wide"><%= m.label %></span>
+          <span class="text-[10px] text-zinc-600"><%= m.fmt(m.used) %> / <%= m.fmt(m.total) %></span>
         </div>
-        <% }) %>
+        <div class="h-1 w-full rounded-full bg-zinc-800">
+          <div class="h-1 rounded-full transition-all" style="width:<%= pct.toFixed(1) %>%; background:<%= barColor %>"></div>
+        </div>
       </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <!-- Servers -->
+  <div class="px-4 pt-5 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm font-semibold text-white">Your servers</p>
+      <p class="text-xs text-zinc-600"><%= servers.length %> total</p>
     </div>
 
-    <!-- Server table -->
-    <div class="border-b border-white/10 pt-6 pb-2">
-      <h2 class="px-4 text-sm font-semibold text-white sm:px-6 lg:px-8 mb-1">Your servers</h2>
-      <p class="px-4 sm:px-6 lg:px-8 text-xs text-zinc-500 mb-4">Click a server name to open it in the Pterodactyl panel.</p>
+    <% if (servers.length === 0) { %>
+    <div class="rounded-2xl border border-dashed border-white/10 py-14 text-center">
+      <svg class="mx-auto h-10 w-10 text-zinc-700 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
+      <p class="text-sm text-zinc-500">No servers yet</p>
+      <a href="/servers/create" class="mt-4 inline-block rounded-full bg-blue-500/15 px-5 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">Create your first server</a>
+    </div>
+    <% } else { %>
 
-      <% if (servers.length === 0) { %>
-      <div class="px-4 sm:px-6 lg:px-8 mt-4 text-center py-16">
-        <svg class="mx-auto h-10 w-10 text-zinc-700" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5" />
-        </svg>
-        <p class="mt-4 text-sm text-zinc-500">No servers yet.</p>
-        <a href="/servers/create" class="mt-4 inline-block rounded-full bg-blue-400/10 px-5 py-2 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition">Create your first server</a>
-      </div>
-      <% } else { %>
-      <table class="w-full whitespace-nowrap text-left">
-        <colgroup><col class="w-full sm:w-4/12"><col class="lg:w-2/12"><col class="lg:w-3/12"><col class="lg:w-1/12"><col class="lg:w-2/12"></colgroup>
-        <thead class="border-b border-white/10 text-xs text-zinc-400">
+    <!-- Desktop table -->
+    <div class="hidden sm:block table-wrap rounded-2xl border border-white/[0.06] overflow-hidden">
+      <table class="w-full text-left">
+        <thead class="bg-white/[0.02] border-b border-white/[0.06]">
           <tr>
-            <th class="py-2 pl-4 pr-8 font-medium sm:pl-6 lg:pl-8">Name</th>
-            <th class="hidden py-2 pl-0 pr-8 font-medium sm:table-cell">Plan</th>
-            <th class="hidden py-2 pl-0 pr-4 font-medium lg:table-cell">Resources</th>
-            <th class="py-2 pl-0 pr-4 font-medium">Status</th>
-            <th class="hidden py-2 pl-0 pr-6 text-right font-medium sm:table-cell lg:pr-8">Actions</th>
+            <th class="py-3 pl-4 pr-6 text-xs font-semibold text-zinc-500">Name</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Plan</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500 hidden lg:table-cell">Resources</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Status</th>
+            <th class="py-3 pr-4 text-xs font-semibold text-zinc-500 text-right">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-white/5">
+        <tbody class="divide-y divide-white/[0.04]">
           <% servers.forEach(server => {
-            const createdAt = new Date(server.created_at);
-            const diff = Date.now()-createdAt, mins=Math.floor(diff/60000), hrs=Math.floor(mins/60), days=Math.floor(hrs/24);
-            const timeAgo = days>0?days+'d ago':hrs>0?hrs+'h ago':mins+'m ago';
             const cycleEnd = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
-            const daysLeft = cycleEnd ? Math.max(0,Math.ceil((cycleEnd-Date.now())/86400000)) : null;
-            const subStatus = server.subscription_active===1?'active':server.subscription_active===2?'cancelled':null;
+            const daysLeft = cycleEnd ? Math.max(0, Math.ceil((cycleEnd - Date.now()) / 86400000)) : null;
+            const subStatus = server.subscription_active === 1 ? 'active' : server.subscription_active === 2 ? 'cancelled' : null;
+            const ago = (() => { const d = Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
           %>
-          <tr class="hover:bg-white/[0.02] transition">
-            <td class="py-4 pl-4 pr-8 sm:pl-6 lg:pl-8">
+          <tr class="hover:bg-white/[0.015] transition-colors">
+            <td class="py-3.5 pl-4 pr-6">
               <div class="flex items-center gap-x-3">
-                <div class="h-8 w-8 rounded-lg bg-blue-400/10 flex items-center justify-center shrink-0">
-                  <svg class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5" />
-                  </svg>
+                <div class="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <svg class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
                 </div>
                 <div class="min-w-0">
                   <% if (server.pterodactyl_identifier && process.env.PTERODACTYL_PANEL_URL) { %>
                   <a href="<%= process.env.PTERODACTYL_PANEL_URL %>/server/<%= server.pterodactyl_identifier %>" target="_blank"
-                    class="text-sm font-medium text-white hover:text-blue-400 transition truncate block max-w-[180px]">
-                    <%= server.name %>
-                  </a>
+                    class="text-sm font-medium text-white hover:text-blue-400 transition-colors truncate block max-w-[160px]"><%= server.name %></a>
                   <% } else { %>
-                  <span class="text-sm font-medium text-white truncate block max-w-[180px]"><%= server.name %></span>
+                  <span class="text-sm font-medium text-white truncate block max-w-[160px]"><%= server.name %></span>
                   <% } %>
-                  <p class="text-xs text-zinc-600"><%= timeAgo %></p>
+                  <p class="text-xs text-zinc-600"><%= ago %></p>
                 </div>
               </div>
             </td>
-            <td class="hidden py-4 pl-0 pr-4 sm:table-cell sm:pr-8">
+            <td class="py-3.5 pr-6">
               <div class="flex flex-col gap-y-0.5">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                  <%= server.plan==='free'?'bg-zinc-400/10 text-zinc-400 ring-1 ring-zinc-400/20':'bg-blue-400/10 text-blue-400 ring-1 ring-blue-400/20' %>">
-                  <%= server.plan.charAt(0).toUpperCase()+server.plan.slice(1) %>
+                <span class="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium
+                  <%= server.plan === 'free' ? 'bg-zinc-500/15 text-zinc-400 ring-1 ring-zinc-500/30' : 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30' %>">
+                  <%= server.plan.charAt(0).toUpperCase() + server.plan.slice(1) %>
                 </span>
-                <% if (subStatus==='active'&&daysLeft!==null) { %><span class="text-xs text-zinc-600">Renews in <%= daysLeft %>d</span><% } %>
-                <% if (subStatus==='cancelled'&&daysLeft!==null) { %><span class="text-xs text-amber-400/60">Cancels in <%= daysLeft %>d</span><% } %>
+                <% if (subStatus === 'active' && daysLeft !== null) { %>
+                <span class="text-[10px] text-zinc-600">Renews in <%= daysLeft %>d</span>
+                <% } else if (subStatus === 'cancelled' && daysLeft !== null) { %>
+                <span class="text-[10px] text-amber-500/70">Cancels in <%= daysLeft %>d</span>
+                <% } %>
               </div>
             </td>
-            <td class="hidden py-4 pl-0 pr-4 lg:table-cell">
-              <div class="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-500">
+            <td class="py-3.5 pr-6 hidden lg:table-cell">
+              <div class="flex flex-wrap gap-x-2 text-xs text-zinc-500">
                 <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
                 <span class="text-zinc-700">·</span>
                 <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
@@ -145,53 +145,91 @@
                 <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
               </div>
             </td>
-            <td class="py-4 pl-0 pr-4">
+            <td class="py-3.5 pr-6">
               <div class="flex items-center gap-x-1.5">
-                <div class="h-1.5 w-1.5 rounded-full bg-green-400 shrink-0"></div>
-                <span class="text-xs text-zinc-400 hidden sm:block">Online</span>
+                <span class="h-1.5 w-1.5 rounded-full bg-green-400 shrink-0"></span>
+                <span class="text-xs text-zinc-400">Online</span>
               </div>
             </td>
-            <td class="hidden py-4 pl-0 pr-6 text-right sm:table-cell lg:pr-8">
-              <a href="/servers/<%= server.id %>/edit" class="bg-[#131417] border border-zinc-400/10 rounded-lg px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-400/30 transition">Edit</a>
-              <a href="/servers/<%= server.id %>/delete" class="bg-red-400/5 border border-red-400/10 ml-2 rounded-lg px-3 py-1.5 text-xs text-red-400 hover:bg-red-400/10 transition">Delete</a>
+            <td class="py-3.5 pr-4 text-right">
+              <div class="flex items-center justify-end gap-x-2">
+                <a href="/servers/<%= server.id %>/edit" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Edit</a>
+                <a href="/servers/<%= server.id %>/delete" class="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
+              </div>
             </td>
           </tr>
           <% }) %>
         </tbody>
       </table>
-      <% } %>
     </div>
 
-    <!-- Plans -->
-    <div id="plans" class="px-4 sm:px-6 lg:px-8 py-8 pb-16">
-      <h2 class="text-sm font-semibold text-white mb-1">Upgrade Plans</h2>
-      <p class="text-xs text-zinc-500 mb-6">Get a server with dedicated resource allocation, billed monthly.</p>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <% plans.forEach(plan => { %>
-        <div class="rounded-2xl border border-white/5 bg-zinc-600/10 p-6 hover:border-blue-400/20 transition">
-          <h3 class="text-sm font-semibold text-white"><%= plan.name %></h3>
-          <ul class="mt-3 space-y-1.5 text-xs text-zinc-400">
-            <li class="flex items-center gap-x-2"><div class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></div><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
-            <li class="flex items-center gap-x-2"><div class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></div><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
-            <li class="flex items-center gap-x-2"><div class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></div><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
-            <li class="flex items-center gap-x-2"><div class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></div><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
-          </ul>
-          <div class="mt-5 flex items-end justify-between">
-            <div>
-              <p class="text-xl font-semibold text-white">₹<%= (plan.price_inr/100).toFixed(2) %><span class="text-xs text-zinc-500">/mo</span></p>
-              <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
-            </div>
-            <div class="flex flex-col gap-y-2">
-              <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="rounded-full bg-blue-400/10 px-4 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-400/20 hover:bg-blue-400/20 transition text-center">UPI / Razorpay</a>
-              <a href="/checkout/<%= plan.key %>?gateway=paypal" class="rounded-full bg-zinc-600/20 px-4 py-1.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-zinc-600/30 transition text-center">PayPal</a>
-            </div>
+    <!-- Mobile cards -->
+    <div class="sm:hidden space-y-3">
+      <% servers.forEach(server => {
+        const ago = (() => { const d=Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
+      %>
+      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <div class="flex items-start justify-between gap-x-3 mb-3">
+          <div class="min-w-0">
+            <% if (server.pterodactyl_identifier && process.env.PTERODACTYL_PANEL_URL) { %>
+            <a href="<%= process.env.PTERODACTYL_PANEL_URL %>/server/<%= server.pterodactyl_identifier %>" target="_blank"
+              class="text-sm font-semibold text-white truncate block"><%= server.name %></a>
+            <% } else { %>
+            <p class="text-sm font-semibold text-white truncate"><%= server.name %></p>
+            <% } %>
+            <p class="text-xs text-zinc-600 mt-0.5"><%= ago %></p>
+          </div>
+          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+            <%= server.plan === 'free' ? 'bg-zinc-500/15 text-zinc-400' : 'bg-blue-500/15 text-blue-400' %>">
+            <%= server.plan %>
+          </span>
+        </div>
+        <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 mb-3">
+          <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
+          <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
+          <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
+        </div>
+        <div class="flex items-center gap-x-2">
+          <a href="/servers/<%= server.id %>/edit" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300 hover:border-white/20 transition-colors">Edit</a>
+          <a href="/servers/<%= server.id %>/delete" class="flex-1 text-center rounded-lg border border-red-500/20 bg-red-500/5 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- Plans -->
+  <div id="plans" class="px-4 pt-8 pb-16 sm:px-6 lg:px-8">
+    <div class="mb-5">
+      <p class="text-sm font-semibold text-white">Upgrade Plans</p>
+      <p class="text-xs text-zinc-500 mt-0.5">Dedicated server with guaranteed resources, billed monthly.</p>
+    </div>
+    <div class="card-grid">
+      <% plans.forEach(plan => { %>
+      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-blue-500/20 transition-colors">
+        <p class="text-sm font-semibold text-white mb-3"><%= plan.name %></p>
+        <ul class="space-y-1.5 text-xs text-zinc-400 mb-5">
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
+        </ul>
+        <div class="flex items-end justify-between">
+          <div>
+            <p class="text-xl font-bold text-white">₹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
+            <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
+          </div>
+          <div class="flex flex-col gap-y-1.5">
+            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors text-center">UPI / Razorpay</a>
+            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-white/[0.08] transition-colors text-center">PayPal</a>
           </div>
         </div>
-        <% }) %>
       </div>
+      <% }) %>
     </div>
+  </div>
 
-  </main>
-</div>
+</div><!-- /.app-main -->
 </body>
 </html>

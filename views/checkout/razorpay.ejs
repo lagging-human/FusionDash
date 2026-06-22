@@ -1,11 +1,11 @@
 <!doctype html>
-<html class="h-full bg-[#0f1012]">
+<html lang="en">
 <%- include('../components/header') %>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<body class="h-full" style="font-family: 'Space Grotesk'">
-<div>
+<body>
+
   <%- include('../components/sidebar', { activePage: 'dashboard' }) %>
-  <main class="lg:pl-64">
+  <div class="app-main">
 
     <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
       <div>
@@ -30,7 +30,7 @@
       </button>
       <p class="text-xs text-zinc-600 mt-3 text-center">A secure Razorpay modal will open. You can pay via UPI, card, or netbanking.</p>
     </div>
-  </main>
+  </div>
 </div>
 
 <script>

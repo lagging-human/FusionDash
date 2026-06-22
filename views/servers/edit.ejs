@@ -1,10 +1,10 @@
 <!doctype html>
-<html class="h-full bg-[#0f1012]">
+<html lang="en">
 <%- include('../components/header') %>
-<body class="h-full" style="font-family: 'Space Grotesk'">
-<div>
+<body>
+
   <%- include('../components/sidebar', { activePage: 'dashboard' }) %>
-  <main class="lg:pl-64">
+  <div class="app-main">
 
     <div class="flex items-center justify-between bg-zinc-700/10 border-b border-white/5 px-4 py-4 sm:px-6 lg:px-8">
       <div>
@@ -50,7 +50,7 @@
         <a href="/servers/<%= server.id %>/delete" class="rounded-full bg-red-400/5 px-6 py-2 text-sm font-medium text-red-400 ring-1 ring-inset ring-red-400/10 hover:bg-red-400/10 transition">Delete server</a>
       </div>
     </div>
-  </main>
+  </div>
 </div>
 
 <script>

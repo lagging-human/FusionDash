@@ -1,10 +1,10 @@
 <!doctype html>
-<html class="h-full bg-[#0f1012]">
+<html lang="en">
 <%- include('../components/header') %>
-<body class="h-full" style="font-family: 'Space Grotesk'">
-<div>
+<body>
+
   <%- include('../components/sidebar', { activePage: 'account' }) %>
-  <main class="lg:pl-64">
+  <div class="app-main">
 
     <% if (error) { %>
     <div class="border border-amber-400/10 bg-amber-400/5 p-4 flex gap-x-3">
@@ -190,7 +190,7 @@
       </div>
 
     </div>
-  </main>
+  </div>
 </div>
 </body>
 </html>

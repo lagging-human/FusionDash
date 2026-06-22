@@ -1,6 +1,11 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
+// =====================================================
+// Razorpay (Orders API + signature verification)
+// https://razorpay.com/docs/payments/server-integration/nodejs/integration-steps/
+// =====================================================
+
 const razorpayApi = axios.create({
   baseURL: 'https://api.razorpay.com/v1',
   auth: {
@@ -9,6 +14,9 @@ const razorpayApi = axios.create({
   }
 });
 
+/**
+ * Create a Razorpay order. amountPaise must be an integer (smallest unit).
+ */
 async function createRazorpayOrder({ amountPaise, receipt, notes }) {
   const res = await razorpayApi.post('/orders', {
     amount: amountPaise,
@@ -20,6 +28,10 @@ async function createRazorpayOrder({ amountPaise, receipt, notes }) {
   return res.data; // { id, amount, currency, receipt, ... }
 }
 
+/**
+ * Verify the signature returned by Razorpay Checkout after a successful payment.
+ * https://razorpay.com/docs/payments/server-integration/nodejs/integration-steps/#3-verify-payment-signature
+ */
 function verifyRazorpayPaymentSignature({ orderId, paymentId, signature }) {
   const expected = crypto
     .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
@@ -28,6 +40,10 @@ function verifyRazorpayPaymentSignature({ orderId, paymentId, signature }) {
   return expected === signature;
 }
 
+/**
+ * Verify a Razorpay webhook payload signature.
+ * https://razorpay.com/docs/webhooks/validate-test/
+ */
 function verifyRazorpayWebhookSignature({ rawBody, signature }) {
   const expected = crypto
     .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || '')
@@ -35,6 +51,11 @@ function verifyRazorpayWebhookSignature({ rawBody, signature }) {
     .digest('hex');
   return expected === signature;
 }
+
+// =====================================================
+// PayPal (Orders v2 REST API)
+// https://developer.paypal.com/docs/api/orders/v2/
+// =====================================================
 
 const paypalBase = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'
@@ -63,6 +84,9 @@ async function getPaypalAccessToken() {
   return cachedToken;
 }
 
+/**
+ * Create a PayPal order (intent: CAPTURE). amountUsd is a string/number like "3.50".
+ */
 async function createPaypalOrder({ amountUsd, referenceId, returnUrl, cancelUrl }) {
   const token = await getPaypalAccessToken();
   const res = await axios.post(
@@ -87,6 +111,9 @@ async function createPaypalOrder({ amountUsd, referenceId, returnUrl, cancelUrl 
   return res.data; // { id, status, links: [...] }
 }
 
+/**
+ * Capture a previously approved PayPal order.
+ */
 async function capturePaypalOrder(orderId) {
   const token = await getPaypalAccessToken();
   const res = await axios.post(
@@ -97,6 +124,9 @@ async function capturePaypalOrder(orderId) {
   return res.data; // { id, status: 'COMPLETED', purchase_units: [...] }
 }
 
+/**
+ * Fetch order details (used to read reference_id / status without capturing).
+ */
 async function getPaypalOrder(orderId) {
   const token = await getPaypalAccessToken();
   const res = await axios.get(`${paypalBase}/v2/checkout/orders/${orderId}`, {

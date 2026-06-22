@@ -1,10 +1,10 @@
 <!doctype html>
-<html class="h-full bg-[#0f1012]">
+<html lang="en">
 <%- include('./components/header') %>
-<body class="h-full" style="font-family: 'Space Grotesk'">
+<body class="flex min-h-screen items-center justify-center">
   <div class="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <h2 class="mt-6 text-center text-2xl font-medium leading-9 text-white">Welcome!</h2>
+      <h2 class="mt-6 text-center text-2xl font-medium leading-9 text-white">Welcome to <%= appName %></h2>
       <h2 class="mt-1 text-center text-sm font-normal text-zinc-500">Sign in to manage your servers.</h2>
     </div>
 
@@ -47,7 +47,7 @@
       </div>
 
       <p class="mt-6 text-center text-sm text-zinc-600">
-        Powered by <a href="https://github.com/lagging-human/FusionDash" class="text-zinc-400 hover:text-zinc-300 transition" target="_blank" rel="noopener">FusionDash</a>
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank" class="text-zinc-500 hover:text-zinc-300 transition-colors"><%= appName %></a>
       </p>
     </div>
   </div>

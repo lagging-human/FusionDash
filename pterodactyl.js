@@ -12,6 +12,9 @@ const api = axios.create({
   }
 });
 
+/**
+ * Find a Pterodactyl panel user by email, or create one.
+ */
 async function findOrCreatePanelUser({ email, username }) {
   const search = await api.get('/users', { params: { 'filter[email]': email } });
   const existing = search.data.data?.[0];
@@ -37,6 +40,10 @@ async function getPanelUser(panelUserId) {
   return res.data;
 }
 
+/**
+ * List all nests with their eggs (for the create-server picker).
+ * Returns: [{ id, name, eggs: [{ id, name }] }]
+ */
 async function listNestsWithEggs() {
   const nestsRes = await api.get('/nests', { params: { per_page: 100 } });
   const nests = nestsRes.data.data;
@@ -56,6 +63,10 @@ async function listNestsWithEggs() {
   return result;
 }
 
+/**
+ * List all nodes with location names (for the create-server picker).
+ * Returns: [{ id, name, location_id, fqdn }]
+ */
 async function listNodes() {
   const res = await api.get('/nodes', { params: { per_page: 100, include: 'location' } });
   return res.data.data.map(n => ({
@@ -67,6 +78,9 @@ async function listNodes() {
   }));
 }
 
+/**
+ * Get egg details (docker image, startup, default env vars).
+ */
 async function getEgg(nestId, eggId) {
   const res = await api.get(`/nests/${nestId}/eggs/${eggId}`, { params: { include: 'variables' } });
   const egg = res.data.attributes;
@@ -77,6 +91,10 @@ async function getEgg(nestId, eggId) {
   return { egg, environment };
 }
 
+/**
+ * Find a free (unassigned) allocation on the given node.
+ * Returns the allocation id, or null if none available.
+ */
 async function findFreeAllocation(nodeId) {
   let page = 1;
   while (true) {
@@ -90,6 +108,10 @@ async function findFreeAllocation(nodeId) {
   }
 }
 
+/**
+ * Create a server for a panel user on a specific node, nest, and egg.
+ * specs: { memory, disk, cpu, databases, backups }
+ */
 async function createServer({ panelUserId, name, nestId, eggId, nodeId, specs, description }) {
   const { egg, environment } = await getEgg(nestId, eggId);
 
@@ -127,6 +149,9 @@ async function createServer({ panelUserId, name, nestId, eggId, nodeId, specs, d
   return res.data;
 }
 
+/**
+ * Update a server's build/resource limits.
+ */
 async function updateServerBuild(serverId, specs) {
   const res = await api.patch(`/servers/${serverId}/build`, {
     limits: {
@@ -145,6 +170,9 @@ async function updateServerBuild(serverId, specs) {
   return res.data;
 }
 
+/**
+ * Delete a server (force = true also deletes if suspended).
+ */
 async function deleteServer(serverId, force = false) {
   const url = force ? `/servers/${serverId}/force` : `/servers/${serverId}`;
   await api.delete(url);

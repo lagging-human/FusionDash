@@ -54,9 +54,11 @@ function pullAndRestart() {
     execSync('npm install --production', { cwd: ROOT, stdio: 'inherit' });
     log('Update complete. Restarting…');
 
+    // Write the new sha so we don't re-update on the next check
     const newSha = getGitHeadSha();
     if (newSha) writeLocalSha(newSha);
 
+    // Prefer PM2 restart if available
     exec('pm2 restart fusiondash 2>/dev/null || pm2 restart all 2>/dev/null', (err) => {
       if (err) {
         log('PM2 not available, using process.exit(0) — ensure a process manager restarts the app.');

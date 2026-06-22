@@ -4,6 +4,9 @@ const path = require('path');
 const db = new Database(path.join(__dirname, 'data.sqlite'));
 db.pragma('journal_mode = WAL');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Schema
+// ─────────────────────────────────────────────────────────────────────────────
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id                    TEXT PRIMARY KEY,
@@ -116,6 +119,9 @@ CREATE TABLE IF NOT EXISTS coin_log (
 );
 `);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Safe migrations for existing databases
+// ─────────────────────────────────────────────────────────────────────────────
 const migrations = [
   `ALTER TABLE servers ADD COLUMN subscription_active INTEGER DEFAULT 0`,
   `ALTER TABLE servers ADD COLUMN subscription_gateway TEXT`,
@@ -142,26 +148,49 @@ const migrations = [
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Default settings
+// ─────────────────────────────────────────────────────────────────────────────
 const defaultSettings = {
+  // Default resource pool given to every new user
   default_memory:     '6144',   // 6 GB
   default_disk:       '5120',   // 5 GB
   default_cpu:        '80',     // 80%
   default_ports:      '2',
   default_databases:  '1',
   default_backups:    '1',
+  // Panel deploy defaults
   pterodactyl_node_id:     '',
   pterodactyl_egg_id:      '',
   pterodactyl_nest_id:     '',
   pterodactyl_location_id: '',
-  daily_coins:        '50',
-  workink_coins:      '20',
-  workink_api_key:    '',
-  workink_offer_id:   '',
-  dashboard_url:      'http://localhost:3000',
+  // Coin earn settings
+  daily_coins:             '50',
+  workink_coins:           '20',
+  workink_api_key:         '',
+  workink_offer_id:        '',
+  // Paymentwall offerwall
+  paymentwall_app_key:     '',
+  paymentwall_secret_key:  '',
+  paymentwall_widget:      'mw6',
+  paymentwall_coins:       '30',
+  // Notik offerwall
+  notik_api_key:           '',
+  notik_secret_key:        '',
+  notik_coins:             '25',
+  notik_offer_url:         '',
+  // Branding
+  app_name:            'FusionDash',
+  app_favicon_url:     '',
+  // Dashboard info
+  dashboard_url:           'http://localhost:3000',
 };
 const ins = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k,v] of Object.entries(defaultSettings)) ins.run(k, v);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Default store items
+// ─────────────────────────────────────────────────────────────────────────────
 const insItem = db.prepare(`
   INSERT OR IGNORE INTO store_items (key,name,description,resource,amount,cost,active)
   VALUES (@key,@name,@description,@resource,@amount,@cost,@active)
@@ -176,6 +205,9 @@ insItem.run({ key:'db_1',      name:'1 Database',    description:'Add 1 database
 insItem.run({ key:'backup_1',  name:'1 Backup',      description:'Add 1 backup slot to your pool',        resource:'backups',   amount:1,    cost:4,   active:1 });
 insItem.run({ key:'coins_100', name:'100 Coins',     description:'Buy 100 coins (costs ₹49)',              resource:'coins',     amount:100,  cost:0,   active:0 }); // paid separately
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Default plans
+// ─────────────────────────────────────────────────────────────────────────────
 const insPlan = db.prepare(`
   INSERT OR IGNORE INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,active)
   VALUES (@key,@name,@price_inr,@price_usd,@memory,@disk,@cpu,@databases,@backups,@active)
@@ -185,3 +217,12 @@ insPlan.run({ key:'pro',   name:'Pro',   price_inr:24900, price_usd:3.5, memory:
 insPlan.run({ key:'ultra', name:'Ultra', price_inr:49900, price_usd:7,   memory:8192, disk:20480, cpu:300, databases:5, backups:5, active:1 });
 
 module.exports = db;
+
+// Safe migration for new settings
+const newSettings = {
+  paymentwall_app_key: '', paymentwall_secret_key: '',
+  paymentwall_widget: 'mw6', paymentwall_coins: '30',
+  notik_api_key: '', notik_secret_key: '', notik_coins: '25', notik_offer_url: '',
+  app_name: 'FusionDash', app_favicon_url: ''
+};
+for (const [k,v] of Object.entries(newSettings)) ins.run(k, v);

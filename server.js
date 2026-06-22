@@ -6,6 +6,7 @@ const db       = require('./db');
 const ptero    = require('./pterodactyl');
 const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
+const { icon } = require('./icons');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -23,6 +24,9 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 function settingsObj() {
   return Object.fromEntries(
     db.prepare('SELECT key,value FROM settings').all().map(r => [r.key, r.value])
@@ -90,6 +94,9 @@ function freeResources(user) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Prepared statements
+// ─────────────────────────────────────────────────────────────────────────────
 const getUser           = db.prepare('SELECT * FROM users WHERE id=?');
 const getServersByUser  = db.prepare('SELECT * FROM servers WHERE user_id=? ORDER BY id ASC');
 const getServerById     = db.prepare('SELECT * FROM servers WHERE id=?');
@@ -117,29 +124,45 @@ const insertTransaction = db.prepare(`
   VALUES(@user_id,@plan_key,@gateway,@gateway_order_id,@amount,@currency,'pending',@type,@deploy_config)
 `);
 const getTransactionByOrderId = db.prepare('SELECT * FROM transactions WHERE gateway_order_id=? AND gateway=?');
-const markTransactionPaid     = db.prepare("UPDATE transactions SET status='paid',gateway_ref=?,server_id=? WHERE id=?");
-const markTransactionFailed   = db.prepare("UPDATE transactions SET status='failed' WHERE id=?");
+const markTransactionPaid     = db.prepare(`UPDATE transactions SET status='paid',gateway_ref=?,server_id=? WHERE id=?`);
+const markTransactionFailed   = db.prepare(`UPDATE transactions SET status='failed' WHERE id=?`);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Middleware
+// ─────────────────────────────────────────────────────────────────────────────
 function ensureAuth(req, res, next) {
   if (req.isAuthenticated()) return next();
   res.redirect('/login');
 }
 function ensureAdmin(req, res, next) {
   if (req.isAuthenticated() && req.user.is_admin) return next();
-  res.status(403).render('error', { message: 'Admin access required.' });
+  res.status(403).render('error', { message: 'Admin access required.', pageTitle: 'Error' });
 }
 
+// Refresh session user from DB on every request so coins/resources are current
 app.use((req, res, next) => {
   if (req.isAuthenticated()) req.user = getUser.get(req.user.id) || req.user;
+  // Make branding available to every view without explicit passing
+  // Use a simple in-process cache (invalidated on settings save) to avoid hitting DB on every request
+  const s = settingsObj();
+  res.locals.appName    = s.app_name        || 'FusionDash';
+  res.locals.appFavicon = s.app_favicon_url || '';
+  res.locals.icon       = icon;   // <%- icon('name','classes') %> in every view
   next();
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Public
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/',      (req, res) => res.render('home', { user: req.user }));
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
-  res.render('login', { error: req.query.error || null });
+  res.render('login', { error: req.query.error || null, pageTitle: 'Login' });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// OAuth
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/auth/discord', passport.authenticate('discord'));
 app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: '/login?error=Discord+login+failed' }),
@@ -152,16 +175,22 @@ app.get('/auth/google/callback',
 );
 app.post('/logout', (req, res, next) => req.logout(err => err ? next(err) : res.redirect('/')));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/dashboard', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
   const plans   = getAllPlans.all();
   const free    = freeResources(req.user);
   res.render('dashboard', {
-    user: req.user, servers, plans, free,
+    user: req.user, servers, plans, free, pageTitle: 'Dashboard',
     error: req.query.error||null, success: req.query.success||null
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Create Server
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/servers/create', ensureAuth, async (req, res) => {
   if (!req.user.pterodactyl_user_id) {
     return res.redirect('/dashboard?error=' + encodeURIComponent('Your account is not linked to the panel yet. Try logging out and back in.'));
@@ -171,7 +200,7 @@ app.get('/servers/create', ensureAuth, async (req, res) => {
     const s = settingsObj();
     const free = freeResources(req.user);
     res.render('servers/create', {
-      user: req.user, nests, nodes, free,
+      user: req.user, nests, nodes, free, pageTitle: 'New Server',
       dashUrl: s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000',
       error: req.query.error||null
     });
@@ -201,6 +230,7 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
     return res.redirect('/servers/create?error=' + encodeURIComponent('Please select software and a node.'));
   }
 
+  // Validate against user's free pool
   const user = getUser.get(req.user.id);
   const free = freeResources(user);
   const errors = [];
@@ -217,7 +247,7 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
 
   const s   = settingsObj();
   const dashUrl = s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000';
-  const description = `Created from ${dashUrl}`;
+  const description = `Managed by ${dashUrl}`;
 
   try {
     const specs  = { memory, disk, cpu, databases, backups };
@@ -246,10 +276,13 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Edit / Delete Server
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/servers/:id/edit', ensureAuth, (req, res) => {
   const server = getServerById.get(req.params.id);
   if (!server || server.user_id !== req.user.id) return res.status(404).render('error', { message: 'Not found.' });
-  res.render('servers/edit', { user: req.user, server, error: req.query.error||null });
+  res.render('servers/edit', { user: req.user, server, error: req.query.error||null, pageTitle: 'Edit Server' });
 });
 
 app.post('/servers/:id/edit', ensureAuth, async (req, res) => {
@@ -277,7 +310,7 @@ app.get('/servers/:id/delete', ensureAuth, (req, res) => {
       blockReason = `Active subscription — cannot delete until ${end.toLocaleDateString('en-IN', { day:'numeric',month:'long',year:'numeric' })}.`;
     }
   }
-  res.render('servers/delete', { user: req.user, server, blockReason });
+  res.render('servers/delete', { user: req.user, server, blockReason, pageTitle: 'Delete Server' });
 });
 
 app.post('/servers/:id/delete', ensureAuth, async (req, res) => {
@@ -306,10 +339,13 @@ app.post('/servers/:id/cancel-subscription', ensureAuth, (req, res) => {
   res.redirect('/account?success=' + encodeURIComponent(`Subscription cancelled. Server stays active until ${end}.`));
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Store  /store
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/store', ensureAuth, (req, res) => {
   const items = getStoreItems.all();
   res.render('store/index', {
-    user: req.user, items,
+    user: req.user, items, pageTitle: 'Store',
     error: req.query.error||null, success: req.query.success||null
   });
 });
@@ -318,49 +354,62 @@ app.post('/store/buy/:key', ensureAuth, (req, res) => {
   const item = db.prepare('SELECT * FROM store_items WHERE key=? AND active=1').get(req.params.key);
   if (!item) return res.redirect('/store?error=' + encodeURIComponent('Item not found.'));
 
+  const qty  = Math.min(Math.max(parseInt(req.body.qty, 10) || 1, 1), 100); // clamp 1-100
+  const total = item.cost * qty;
+
   const user = getUser.get(req.user.id);
-  if (user.coins < item.cost) {
-    return res.redirect('/store?error=' + encodeURIComponent(`Not enough coins. You have ${user.coins}, need ${item.cost}.`));
+  if (user.coins < total) {
+    return res.redirect('/store?error=' + encodeURIComponent(`Not enough coins. You have ${user.coins}, need ${total} (${qty}x).`));
   }
 
-  addCoins(req.user.id, -item.cost, 'store_purchase', item.key);
+  addCoins(req.user.id, -total, 'store_purchase', `${item.key}x${qty}`);
 
-  if (item.resource === 'memory')    db.prepare('UPDATE users SET res_memory=res_memory+?   WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'disk')      db.prepare('UPDATE users SET res_disk=res_disk+?       WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'cpu')       db.prepare('UPDATE users SET res_cpu=res_cpu+?         WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'ports')     db.prepare('UPDATE users SET res_ports=res_ports+?     WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'databases') db.prepare('UPDATE users SET res_databases=res_databases+? WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'backups')   db.prepare('UPDATE users SET res_backups=res_backups+? WHERE id=?').run(item.amount, req.user.id);
-  if (item.resource === 'coins')     addCoins(req.user.id, item.amount, 'store_coins', item.key);
+  const grant = item.amount * qty;
+  if (item.resource === 'memory')    db.prepare('UPDATE users SET res_memory=res_memory+?       WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'disk')      db.prepare('UPDATE users SET res_disk=res_disk+?           WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'cpu')       db.prepare('UPDATE users SET res_cpu=res_cpu+?             WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'ports')     db.prepare('UPDATE users SET res_ports=res_ports+?         WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'databases') db.prepare('UPDATE users SET res_databases=res_databases+? WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'backups')   db.prepare('UPDATE users SET res_backups=res_backups+?     WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'coins')     addCoins(req.user.id, grant, 'store_coins', `${item.key}x${qty}`);
 
-  res.redirect('/store?success=' + encodeURIComponent(`Purchased ${item.name}!`));
+  res.redirect('/store?success=' + encodeURIComponent(`Purchased ${qty}x ${item.name}!`));
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Earn Coins  /earn
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/earn', ensureAuth, (req, res) => {
   const s = settingsObj();
   const user = getUser.get(req.user.id);
 
   const lastDaily = user.last_daily_claim ? new Date(user.last_daily_claim) : null;
-  const now       = new Date();
-  const dailyCooldownHrs = 24;
-  const canClaimDaily = !lastDaily || (now - lastDaily) >= dailyCooldownHrs * 3600_000;
-  const dailyNextIn = lastDaily ? Math.max(0, dailyCooldownHrs*3600 - Math.floor((now-lastDaily)/1000)) : 0;
+  const now = new Date();
+  const canClaimDaily = !lastDaily || (now - lastDaily) >= 24 * 3600_000;
+  const dailyNextIn = lastDaily ? Math.max(0, 24*3600 - Math.floor((now-lastDaily)/1000)) : 0;
 
-  const recentLog = db.prepare('SELECT * FROM coin_log WHERE user_id=? ORDER BY id DESC LIMIT 10').all(req.user.id);
+  const recentLog = db.prepare('SELECT * FROM coin_log WHERE user_id=? ORDER BY id DESC LIMIT 15').all(req.user.id);
+
+  // Build apis object — only pass sections that are configured
+  const apis = {
+    workink:      s.workink_offer_id    ? { offerId: s.workink_offer_id }                                          : null,
+    paymentwall:  s.paymentwall_app_key ? { appKey: s.paymentwall_app_key, widget: s.paymentwall_widget || 'mw6' } : null,
+    notik:        s.notik_api_key       ? { apiKey: s.notik_api_key, offerUrl: s.notik_offer_url }                 : null,
+  };
 
   res.render('earn/index', {
     user: req.user,
     canClaimDaily, dailyNextIn,
-    dailyCoins:    parseInt(s.daily_coins||'50',  10),
-    workinkCoins:  parseInt(s.workink_coins||'20',10),
-    workinkApiKey: s.workink_api_key  || '',
-    workinkOfferId:s.workink_offer_id || '',
-    recentLog,
-    error:   req.query.error  ||null,
-    success: req.query.success||null
+    dailyCoins:    parseInt(s.daily_coins    || '50', 10),
+    workinkCoins:  parseInt(s.workink_coins  || '20', 10),
+    notikCoins:    parseInt(s.notik_coins    || '25', 10),
+    apis, recentLog, pageTitle: 'Earn Coins',
+    error:   req.query.error  || null,
+    success: req.query.success || null
   });
 });
 
+// Daily claim
 app.post('/earn/daily', ensureAuth, (req, res) => {
   const user     = getUser.get(req.user.id);
   const s        = settingsObj();
@@ -378,10 +427,13 @@ app.post('/earn/daily', ensureAuth, (req, res) => {
   res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
 });
 
+// Work.ink verification callback — user completes offer, Work.ink pings our endpoint
+// Docs: https://work.ink/developers  — set postback URL to /earn/workink/callback
 app.get('/earn/workink/callback', async (req, res) => {
   const { user_id, offer_id, payout, secret } = req.query;
   const s = settingsObj();
 
+  // Validate secret matches our API key (Work.ink sends it as a param)
   if (!s.workink_api_key || secret !== s.workink_api_key) {
     return res.status(403).send('Invalid secret');
   }
@@ -389,6 +441,7 @@ app.get('/earn/workink/callback', async (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(user_id);
   if (!user) return res.status(404).send('User not found');
 
+  // Deduplicate: check if this payout ref was already processed
   const already = db.prepare("SELECT id FROM coin_log WHERE reason='workink' AND ref=?").get(offer_id+':'+payout);
   if (already) return res.send('Already processed');
 
@@ -398,25 +451,83 @@ app.get('/earn/workink/callback', async (req, res) => {
   res.send('OK');
 });
 
+// Work.ink link redirect
 app.get('/earn/workink', ensureAuth, (req, res) => {
   const s = settingsObj();
-  if (!s.workink_offer_id) return res.redirect('/earn?error=' + encodeURIComponent('Work.ink offer not configured yet.'));
-  const url = `https://work.ink/${s.workink_offer_id}?user_id=${encodeURIComponent(req.user.id)}`;
+  if (!s.workink_offer_id) return res.redirect('/earn?error=' + encodeURIComponent('Work.ink not configured.'));
+  res.redirect(`https://work.ink/${s.workink_offer_id}?user_id=${encodeURIComponent(req.user.id)}`);
+});
+
+// Notik link redirect — https://notik.me developer docs
+app.get('/earn/notik', ensureAuth, (req, res) => {
+  const s = settingsObj();
+  if (!s.notik_api_key) return res.redirect('/earn?error=' + encodeURIComponent('Notik not configured.'));
+  const url = s.notik_offer_url
+    ? `${s.notik_offer_url}&user_id=${encodeURIComponent(req.user.id)}`
+    : `https://notik.me/offers?api_key=${s.notik_api_key}&user_id=${encodeURIComponent(req.user.id)}`;
   res.redirect(url);
 });
 
+// Notik postback — set postback URL in Notik dashboard to:
+// https://yourdomain.com/earn/notik/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret={YOUR_SECRET_KEY}
+app.get('/earn/notik/callback', async (req, res) => {
+  const { user_id, offer_id, payout, secret } = req.query;
+  const s = settingsObj();
+  if (!s.notik_secret_key || secret !== s.notik_secret_key) return res.status(403).send('Invalid secret');
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(user_id);
+  if (!user) return res.status(404).send('User not found');
+  const ref = `notik:${offer_id}:${payout}`;
+  const already = db.prepare("SELECT id FROM coin_log WHERE reason='notik' AND ref=?").get(ref);
+  if (already) return res.send('Already processed');
+  const amt = parseInt(s.notik_coins || '25', 10);
+  addCoins(user_id, amt, 'notik', ref);
+  res.send('OK');
+});
+
+// Paymentwall pingback — set pingback URL in Paymentwall dashboard to:
+// https://yourdomain.com/earn/paymentwall/callback
+// Paymentwall sends: uid, currency, type, ref, sign, sign_version
+app.get('/earn/paymentwall/callback', async (req, res) => {
+  const crypto = require('crypto');
+  const { uid, currency, type, ref, sign, sign_version } = req.query;
+  const s = settingsObj();
+  if (!s.paymentwall_secret_key) return res.status(403).send('Not configured');
+
+  // Verify Paymentwall signature (sign_version=2: md5 of sorted params + secret)
+  const params = Object.entries(req.query)
+    .filter(([k]) => k !== 'sign')
+    .sort(([a],[b]) => a.localeCompare(b))
+    .map(([k,v]) => `${k}=${v}`)
+    .join('&');
+  const expected = crypto.createHash('md5').update(params + s.paymentwall_secret_key).digest('hex');
+  if (sign !== expected) return res.status(403).send('Invalid signature');
+
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(uid);
+  if (!user) return res.status(404).send('User not found');
+
+  const already = db.prepare("SELECT id FROM coin_log WHERE reason='paymentwall' AND ref=?").get(ref);
+  if (already) return res.send('OK'); // idempotent
+
+  const amt = parseInt(s.paymentwall_coins || '30', 10);
+  addCoins(uid, amt, 'paymentwall', ref);
+  res.send('OK');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Account Settings
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/account', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
   const txns    = db.prepare('SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT 20').all(req.user.id);
   const coinLog = db.prepare('SELECT * FROM coin_log WHERE user_id=? ORDER BY id DESC LIMIT 20').all(req.user.id);
   res.render('account/index', {
-    user: req.user, servers, txns, coinLog,
+    user: req.user, servers, txns, coinLog, pageTitle: 'Account',
     error: req.query.error||null, success: req.query.success||null
   });
 });
 
 app.get('/account/reset-password', ensureAuth, (req, res) => {
-  res.render('account/reset-password', { user: req.user, newPassword: null, error: req.query.error||null });
+  res.render('account/reset-password', { user: req.user, newPassword: null, error: req.query.error||null, pageTitle: 'Reset Password' });
 });
 
 app.post('/account/reset-password', ensureAuth, async (req, res) => {
@@ -431,13 +542,16 @@ app.post('/account/reset-password', ensureAuth, async (req, res) => {
       username: (req.user.username||'user').replace(/[^a-zA-Z0-9_]/g,'').slice(0,32)||'user',
       first_name: req.user.username||'User', last_name: 'User', password: pw
     });
-    res.render('account/reset-password', { user: req.user, newPassword: pw, error: null });
+    res.render('account/reset-password', { user: req.user, newPassword: pw, error: null, pageTitle: 'Reset Password' });
   } catch (err) {
     console.error(err.response?.data||err.message);
-    res.render('account/reset-password', { user: req.user, newPassword: null, error: 'Failed to reset password.' });
+    res.render('account/reset-password', { user: req.user, newPassword: null, error: 'Failed to reset password.', pageTitle: 'Reset Password' });
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkout / Payments
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/checkout/:planKey', ensureAuth, async (req, res) => {
   const plan = getPlanByKey.get(req.params.planKey);
   if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
@@ -445,7 +559,7 @@ app.get('/checkout/:planKey', ensureAuth, async (req, res) => {
   const gateway = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
   try {
     const [nests, nodes] = await Promise.all([ptero.listNestsWithEggs(), ptero.listNodes()]);
-    res.render('checkout/configure', { user: req.user, plan, gateway, nests, nodes, error: req.query.error||null });
+    res.render('checkout/configure', { user: req.user, plan, gateway, nests, nodes, error: req.query.error||null, pageTitle: 'Checkout' });
   } catch (err) {
     res.redirect('/dashboard?error=' + encodeURIComponent('Could not load panel options.'));
   }
@@ -469,7 +583,7 @@ app.post('/checkout/:planKey/pay', ensureAuth, async (req, res) => {
         notes: { user_id: req.user.id, plan_key: plan.key }
       });
       insertTransaction.run({ user_id:req.user.id, plan_key:plan.key, gateway:'razorpay', gateway_order_id:order.id, amount:plan.price_inr/100, currency:'INR', type:'new', deploy_config:deployConfig });
-      return res.render('checkout/razorpay', { user:req.user, plan, order, keyId:process.env.RAZORPAY_KEY_ID, baseUrl:process.env.BASE_URL||'' });
+      return res.render('checkout/razorpay', { user:req.user, plan, order, keyId:process.env.RAZORPAY_KEY_ID, baseUrl:process.env.BASE_URL||'', pageTitle: 'Pay' });
     }
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const order   = await payments.createPaypalOrder({ amountUsd:plan.price_usd, referenceId:`plan_${plan.key}_${req.user.id}`, returnUrl:`${baseUrl}/checkout/paypal/return`, cancelUrl:`${baseUrl}/checkout/${plan.key}?gateway=paypal` });
@@ -490,7 +604,7 @@ async function fulfillPaidTransaction(tx) {
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(tx.user_id);
   const s    = settingsObj();
   const specs = { memory:plan.memory, disk:plan.disk, cpu:plan.cpu, databases:plan.databases, backups:plan.backups };
-  const desc  = `Created from ${s.dashboard_url||process.env.BASE_URL||'http://localhost:3000'}`;
+  const desc  = `Managed by ${s.dashboard_url||process.env.BASE_URL||'http://localhost:3000'}`;
   const result = await ptero.createServer({ panelUserId:user.pterodactyl_user_id, name:cfg.name, nestId:cfg.nest_id, eggId:cfg.egg_id, nodeId:cfg.node_id, specs, description:desc });
   const now = nowISO(), next = nextBillingDate();
   insertServer.run({
@@ -549,22 +663,30 @@ app.get('/checkout/paypal/return', ensureAuth, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin', ensureAdmin, (req, res) => {
   const txns = db.prepare(`SELECT t.*,u.username,u.email FROM transactions t JOIN users u ON t.user_id=u.id ORDER BY t.id DESC LIMIT 50`).all();
   res.render('admin/index', {
     user:req.user, settings:settingsObj(),
     users:getAllUsers.all(), servers:getAllServersAdmin.all(),
     plans:db.prepare('SELECT * FROM plans').all(),
-    storeItems:getAllStoreItems.all(), transactions:txns,
+    storeItems:getAllStoreItems.all(), transactions:txns, pageTitle: 'Admin',
     error:req.query.error||null, success:req.query.success||null
   });
 });
 
 app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
-  const fields = ['default_memory','default_disk','default_cpu','default_ports','default_databases','default_backups',
-                  'daily_coins','workink_coins','workink_api_key','workink_offer_id','dashboard_url'];
-  for (const f of fields) if (req.body[f]!==undefined) setSetting(f, req.body[f]);
-  res.redirect('/admin?success=Settings+updated.');
+  const fields = [
+    'default_memory','default_disk','default_cpu','default_ports','default_databases','default_backups',
+    'daily_coins','workink_coins','workink_api_key','workink_offer_id',
+    'paymentwall_app_key','paymentwall_secret_key','paymentwall_widget','paymentwall_coins',
+    'notik_api_key','notik_secret_key','notik_coins','notik_offer_url',
+    'dashboard_url','app_name','app_favicon_url'
+  ];
+  for (const f of fields) if (req.body[f] !== undefined) setSetting(f, req.body[f]);
+  res.redirect('/admin?success=Settings+updated.#settings');
 });
 
 app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
@@ -635,11 +757,13 @@ app.post('/admin/store/new', ensureAdmin, (req, res) => {
   } catch { res.redirect('/admin?error=Key+already+exists.'); }
 });
 
+// Admin: trigger update check manually
 app.post('/admin/update', ensureAdmin, async (req, res) => {
   res.redirect('/admin?success=Update+check+triggered.+Check+server+logs.');
   setTimeout(() => checkForUpdate(), 500);
 });
 
+// Suspend expired subscriptions (call from cron)
 app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
   const expired = db.prepare(`SELECT * FROM servers WHERE plan!='free' AND subscription_active=2 AND billing_cycle_end<=datetime('now')`).all();
   for (const s of expired) {
@@ -648,6 +772,9 @@ app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
   res.json({ suspended: expired.length });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Start
+// ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`FusionDash running on port ${PORT}`);
