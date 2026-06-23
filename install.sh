@@ -2,6 +2,15 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# FusionDash Installer — github.com/lagging-human/FusionDash
+# Maintained by @lagging-human. Do not redistribute modified versions
+# without removing the integrity check below and the FusionDash branding.
+# Checksum line is updated automatically by scripts/sign-installer.sh
+
+SCRIPT_CHECKSUM="daf60159e3ff71364958fd97127d03ebb4dc21ab37a7521919042622ad7ffb36"
+SCRIPT_VERSION="1.0.0"
+REPO_URL="https://github.com/lagging-human/FusionDash"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -13,6 +22,45 @@ step()    { echo -e "\n${BOLD}${CYAN}── $* ──${NC}"; }
 ask()     { read -rp "  $1" "$2"; }
 askblank(){ read -rp "  $1" "$2" || true; }
 
+verify_integrity() {
+  if [[ "$SCRIPT_CHECKSUM" == "UNSIGNED" ]]; then
+    warn "This installer has not been signed."
+    warn "Download the official version from:"
+    warn "  $REPO_URL/releases"
+    echo ""
+    ask "Continue with unsigned installer? [y/N]: " UNSIGNED_OK
+    [[ "${UNSIGNED_OK,,}" == "y" ]] || die "Aborted. Get the official installer from $REPO_URL"
+    return
+  fi
+
+  local script_path
+  script_path="$(realpath "$0")"
+
+  # Compute checksum of this file excluding the SCRIPT_CHECKSUM line itself
+  local computed
+  computed=$(grep -v '^SCRIPT_CHECKSUM=' "$script_path" | sha256sum | awk '{print $1}')
+
+  if [[ "$computed" != "$SCRIPT_CHECKSUM" ]]; then
+    echo -e "${RED}"
+    echo "  ┌─────────────────────────────────────────────────────┐"
+    echo "  │           INTEGRITY CHECK FAILED                    │"
+    echo "  │                                                     │"
+    echo "  │  This installer has been modified from the official │"
+    echo "  │  FusionDash release. It may contain malicious code. │"
+    echo "  │                                                     │"
+    echo "  │  Get the official installer:                        │"
+    echo "  │  $REPO_URL/releases"
+    echo "  │                                                     │"
+    echo "  │  Expected: $SCRIPT_CHECKSUM      │"
+    echo "  │  Got:      $computed      │"
+    echo "  └─────────────────────────────────────────────────────┘"
+    echo -e "${NC}"
+    die "Aborting to protect your server."
+  fi
+
+  ok "Installer integrity verified (sha256: ${computed:0:16}…)"
+}
+
 [[ $EUID -ne 0 ]] && die "Run as root:  sudo bash install.sh"
 
 clear
@@ -23,8 +71,10 @@ cat << 'BANNER'
  | _| | || | | | (_-<   | |) |/ _` || '_|/ _|
  |_|   \_,_| |_| /__/   |___/ \__,_||_|  \__|
 BANNER
-echo -e "${NC}${BOLD}  github.com/lagging-human/FusionDash${NC}"
-echo -e "  Ubuntu 22.04 / 24.04  ·  Node 22 LTS  ·  Nginx  ·  Let's Encrypt\n"
+echo -e "${NC}${BOLD}  $REPO_URL${NC}"
+echo -e "  v$SCRIPT_VERSION  ·  Ubuntu 22.04 / 24.04  ·  Node 22 LTS  ·  Nginx  ·  Let's Encrypt\n"
+
+verify_integrity
 
 step "Configuration"
 
@@ -50,7 +100,7 @@ ask "Google OAuth2 Client ID: "     GOOGLE_ID
 ask "Google OAuth2 Client Secret: " GOOGLE_SECRET
 
 echo ""
-askblank "Razorpay Key ID (blank to skip): "     RAZORPAY_KEY_ID
+askblank "Razorpay Key ID (blank to skip): "      RAZORPAY_KEY_ID
 askblank "Razorpay Key Secret (blank to skip): "  RAZORPAY_KEY_SECRET
 askblank "PayPal Client ID (blank to skip): "     PAYPAL_CLIENT_ID
 askblank "PayPal Client Secret (blank to skip): " PAYPAL_CLIENT_SECRET
@@ -65,32 +115,32 @@ ask "Proceed? [y/N]: " CONFIRM
 [[ "${CONFIRM,,}" == "y" ]] || { info "Aborted."; exit 0; }
 
 step "DNS check"
-SERVER_IP=$(curl -sf --max-time 5 https://api.ipify.org || \
-            curl -sf --max-time 5 https://ifconfig.me  || \
+SERVER_IP=$(curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || \
+            curl -sf --max-time 5 https://ifconfig.me  2>/dev/null || \
             hostname -I | awk '{print $1}')
 
 info "This server's public IP: ${BOLD}$SERVER_IP${NC}"
 
-DOMAIN_IP=$(getent hosts "$DOMAIN" | awk '{print $1}' || \
-            dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
+DOMAIN_IP=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' || \
+            dig +short "$DOMAIN" A 2>/dev/null | grep -E '^[0-9]+\.' | tail -1 || true)
 
+SKIP_SSL=false
 if [[ -z "$DOMAIN_IP" ]]; then
     warn "$DOMAIN does not resolve to any IP address."
-    warn "Certbot will fail until an A record pointing to $SERVER_IP is added."
-    warn ""
-    ask "Continue anyway and skip SSL for now? [y/N]: " SKIP_SSL_CONFIRM
-    [[ "${SKIP_SSL_CONFIRM,,}" == "y" ]] || die "Add an A record for $DOMAIN → $SERVER_IP, then re-run."
+    warn "Certbot will fail until an A record pointing to $SERVER_IP is created."
+    echo ""
+    ask "Continue without SSL for now? [y/N]: " SKIP_SSL_CONFIRM
+    [[ "${SKIP_SSL_CONFIRM,,}" == "y" ]] || die "Add DNS:  $DOMAIN  A  $SERVER_IP  — then re-run."
     SKIP_SSL=true
 elif [[ "$DOMAIN_IP" != "$SERVER_IP" ]]; then
-    warn "$DOMAIN resolves to $DOMAIN_IP, but this server is $SERVER_IP."
-    warn "SSL will fail until the A record is updated to point to $SERVER_IP."
-    warn ""
-    ask "Continue anyway and skip SSL for now? [y/N]: " SKIP_SSL_CONFIRM
-    [[ "${SKIP_SSL_CONFIRM,,}" == "y" ]] || die "Update the A record for $DOMAIN → $SERVER_IP, then re-run."
+    warn "$DOMAIN resolves to $DOMAIN_IP, not $SERVER_IP."
+    warn "SSL will fail until the A record is updated."
+    echo ""
+    ask "Continue without SSL for now? [y/N]: " SKIP_SSL_CONFIRM
+    [[ "${SKIP_SSL_CONFIRM,,}" == "y" ]] || die "Update DNS:  $DOMAIN  A  $SERVER_IP  — then re-run."
     SKIP_SSL=true
 else
     ok "DNS OK — $DOMAIN → $SERVER_IP"
-    SKIP_SSL=false
 fi
 
 step "System packages"
@@ -100,7 +150,7 @@ apt-get install -y -qq \
     curl wget git build-essential \
     nginx ufw ca-certificates dnsutils \
     python3-certbot-nginx
-ok "System packages installed"
+ok "Packages installed"
 
 step "Node.js 22 LTS"
 if command -v node &>/dev/null; then
@@ -129,7 +179,7 @@ if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "Existing install found — pulling latest…"
     git -C "$INSTALL_DIR" pull origin main
 else
-    git clone https://github.com/lagging-human/FusionDash.git "$INSTALL_DIR"
+    git clone "$REPO_URL.git" "$INSTALL_DIR"
 fi
 ok "Source at $INSTALL_DIR"
 
@@ -140,10 +190,7 @@ ok "npm install complete"
 
 step ".env"
 ENV_FILE="$INSTALL_DIR/.env"
-if [[ -f "$ENV_FILE" ]]; then
-    warn ".env exists — backing up to .env.bak"
-    cp "$ENV_FILE" "${ENV_FILE}.bak"
-fi
+[[ -f "$ENV_FILE" ]] && { warn ".env exists — backing up to .env.bak"; cp "$ENV_FILE" "${ENV_FILE}.bak"; }
 
 BASE_URL="http://$DOMAIN"
 [[ "$SKIP_SSL" == "false" ]] && BASE_URL="https://$DOMAIN"
@@ -226,8 +273,8 @@ server {
 
     location ~ /\. { deny all; }
 
-    add_header X-Frame-Options        "SAMEORIGIN"              always;
-    add_header X-Content-Type-Options "nosniff"                 always;
+    add_header X-Frame-Options        "SAMEORIGIN"                always;
+    add_header X-Content-Type-Options "nosniff"                   always;
     add_header Referrer-Policy        "no-referrer-when-downgrade" always;
 
     access_log /var/log/nginx/fusiondash_access.log;
@@ -243,7 +290,7 @@ ok "Nginx configured"
 step "SSL"
 if [[ "$SKIP_SSL" == "true" ]]; then
     warn "Skipped — DNS not pointing here yet."
-    warn "Once DNS is set, run:"
+    warn "Once DNS propagates, run:"
     warn "  sudo certbot --nginx -d $DOMAIN"
     warn "Then update BASE_URL in $ENV_FILE to https://$DOMAIN"
     warn "And restart: pm2 restart fusiondash"
@@ -259,7 +306,7 @@ else
         sed -i "s|BASE_URL=http://|BASE_URL=https://|" "$ENV_FILE"
         sed -i "s|_CALLBACK_URL=http://|_CALLBACK_URL=https://|g" "$ENV_FILE"
     else
-        warn "Certbot failed. Install will continue over HTTP."
+        warn "Certbot failed. App will run over HTTP."
         warn "Fix DNS then run:  sudo certbot --nginx -d $DOMAIN"
     fi
     systemctl enable certbot.timer 2>/dev/null || true
@@ -275,7 +322,7 @@ pm2 start server.js \
     --log /var/log/fusiondash.log \
     --merge-logs
 
-pm2_startup_cmd=$(pm2 startup systemd -u root --hp /root 2>&1 | grep "^sudo")
+pm2_startup_cmd=$(pm2 startup systemd -u root --hp /root 2>&1 | grep "^sudo" || true)
 [[ -n "$pm2_startup_cmd" ]] && eval "$pm2_startup_cmd" 2>/dev/null || true
 pm2 save
 ok "FusionDash running"
@@ -287,12 +334,12 @@ if [[ "$SKIP_SSL" == "true" ]]; then
     echo -e "  ${YELLOW}Running over HTTP (no SSL yet):${NC}"
     echo -e "  URL: http://$DOMAIN"
     echo ""
-    echo -e "  To enable HTTPS later:"
+    echo -e "  To add HTTPS later:"
     echo -e "    1. Point $DOMAIN → $SERVER_IP in your DNS panel"
-    echo -e "    2. Wait for DNS to propagate (~5–30 min)"
-    echo -e "    3. Run: sudo certbot --nginx -d $DOMAIN"
-    echo -e "    4. Update BASE_URL in $ENV_FILE"
-    echo -e "    5. Run: pm2 restart fusiondash"
+    echo -e "    2. Wait for DNS to propagate (5–30 min)"
+    echo -e "    3. Run:  sudo certbot --nginx -d $DOMAIN"
+    echo -e "    4. Update BASE_URL in $ENV_FILE to https://$DOMAIN"
+    echo -e "    5. Run:  pm2 restart fusiondash"
 else
     echo -e "  URL: https://$DOMAIN"
 fi
@@ -302,11 +349,11 @@ echo -e "  Config:      $ENV_FILE"
 echo ""
 echo -e "  ${BOLD}Promote your first admin:${NC}"
 echo -e "    cd $INSTALL_DIR"
-echo -e "    node -e \"require('./db').prepare('UPDATE users SET is_admin=1 WHERE email=?').run('you@example.com'); console.log('done')\""
+echo -e "    node -e \"require('./db').prepare('UPDATE users SET is_admin=1 WHERE email=?').run('you@example.com');console.log('done')\""
 echo ""
 echo -e "  ${BOLD}Common commands:${NC}"
-echo -e "    pm2 logs fusiondash      live app logs"
-echo -e "    pm2 restart fusiondash   restart after .env changes"
+echo -e "    pm2 logs fusiondash      live logs"
+echo -e "    pm2 restart fusiondash   restart after config changes"
 echo -e "    pm2 monit                CPU/RAM monitor"
 echo -e "    certbot renew --dry-run  test SSL renewal"
 echo ""

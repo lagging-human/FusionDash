@@ -1,11 +1,142 @@
 <!doctype html>
 <html lang="en">
 <%- include('./components/header') %>
-<body class="flex min-h-screen items-center justify-center">
+<body>
   <% if (user) { %>
     <script>window.location.href='/dashboard';</script>
   <% } else { %>
-    <script>window.location.href='/login';</script>
+
+  <div class="min-h-screen flex flex-col">
+
+    <!-- Nav -->
+    <nav class="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+      <div class="flex items-center gap-x-2.5">
+        <% if (appFavicon) { %>
+          <img src="<%= appFavicon %>" class="h-7 w-7 rounded-lg object-cover" alt="">
+        <% } else { %>
+          <div class="h-7 w-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <span class="text-xs font-bold text-blue-400"><%= appName ? appName[0].toUpperCase() : 'F' %></span>
+          </div>
+        <% } %>
+        <span class="text-sm font-semibold text-white"><%= appName %></span>
+      </div>
+      <div class="flex items-center gap-x-3">
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank"
+          class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+          GitHub
+        </a>
+        <a href="/login"
+          class="rounded-full bg-blue-500/15 px-4 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+          Sign in
+        </a>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="flex-1 flex flex-col items-center justify-center px-4 py-20 text-center">
+      <div class="inline-flex items-center gap-x-2 rounded-full bg-blue-500/10 px-4 py-1.5 ring-1 ring-inset ring-blue-500/20 mb-6">
+        <span class="h-1.5 w-1.5 rounded-full bg-blue-400"></span>
+        <span class="text-xs font-medium text-blue-400">Powered by FusionDash</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-5xl font-bold text-white max-w-2xl leading-tight">
+        Game server hosting,<br>
+        <span class="text-blue-400">made simple.</span>
+      </h1>
+      <p class="mt-5 text-base text-zinc-400 max-w-xl">
+        Deploy Minecraft, Pterodactyl-powered game servers in seconds.
+        Earn coins, buy resources, and manage everything from one dashboard.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <a href="/login"
+          class="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 transition-colors">
+          Get started free
+        </a>
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank"
+          class="rounded-full bg-white/[0.06] px-6 py-2.5 text-sm font-semibold text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 transition-colors">
+          View source
+        </a>
+      </div>
+    </div>
+
+    <!-- Live stats -->
+    <div class="border-t border-white/[0.06] bg-white/[0.02]">
+      <div class="max-w-4xl mx-auto px-6 py-10">
+        <p class="text-xs font-semibold text-zinc-600 uppercase tracking-widest text-center mb-6">
+          Live Platform Stats
+        </p>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+          <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
+            <p class="text-3xl font-bold text-white"><%= stats.users %></p>
+            <p class="text-xs text-zinc-500 mt-1">Registered users</p>
+          </div>
+
+          <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
+            <p class="text-3xl font-bold text-white"><%= stats.servers %></p>
+            <p class="text-xs text-zinc-500 mt-1">Servers created</p>
+          </div>
+
+          <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
+            <p class="text-3xl font-bold text-white"><%= stats.paid_transactions %></p>
+            <p class="text-xs text-zinc-500 mt-1">Paid orders</p>
+          </div>
+
+          <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
+            <p class="text-3xl font-bold text-white"><%= stats.free_servers %></p>
+            <p class="text-xs text-zinc-500 mt-1">Free servers active</p>
+          </div>
+
+        </div>
+
+        <!-- Second row — extra stats if > 0 -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
+
+          <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3">
+            <%- icon('server', 'h-5 w-5 text-blue-400 shrink-0') %>
+            <div>
+              <p class="text-lg font-bold text-white"><%= stats.paid_servers %></p>
+              <p class="text-xs text-zinc-600">Paid plan servers</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3">
+            <%- icon('users', 'h-5 w-5 text-purple-400 shrink-0') %>
+            <div>
+              <p class="text-lg font-bold text-white"><%= stats.admins %></p>
+              <p class="text-xs text-zinc-600">Admins</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3 sm:col-span-1 col-span-2">
+            <%- icon('money', 'h-5 w-5 text-green-400 shrink-0') %>
+            <div>
+              <p class="text-lg font-bold text-white">
+                ₹<%= stats.revenue_inr %>
+                <span class="text-sm text-zinc-500 font-normal">/ $<%= stats.revenue_usd %></span>
+              </p>
+              <p class="text-xs text-zinc-600">Total revenue</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/[0.06] px-6 py-4 flex flex-wrap items-center justify-between gap-2">
+      <p class="text-xs text-zinc-600">
+        Built with
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank"
+          class="text-zinc-500 hover:text-zinc-300 transition-colors">FusionDash</a>
+        — open source Pterodactyl billing dashboard.
+      </p>
+      <p class="text-xs text-zinc-700">
+        v<%= appVersion %> &nbsp;·&nbsp; install id: <%= stats.install_id.slice(0,8) %>
+      </p>
+    </footer>
+
+  </div>
   <% } %>
 </body>
 </html>

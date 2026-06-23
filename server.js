@@ -7,6 +7,7 @@ const ptero    = require('./pterodactyl');
 const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
 const { icon } = require('./icons');
+const { getLiveStats, getOrCreateInstallId } = require('./telemetry');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -147,14 +148,24 @@ app.use((req, res, next) => {
   const s = settingsObj();
   res.locals.appName    = s.app_name        || 'FusionDash';
   res.locals.appFavicon = s.app_favicon_url || '';
-  res.locals.icon       = icon;   // <%- icon('name','classes') %> in every view
+  res.locals.icon       = icon;
+  res.locals.appVersion = require('./package.json').version || '1.0.0';
   next();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public
 // ─────────────────────────────────────────────────────────────────────────────
-app.get('/',      (req, res) => res.render('home', { user: req.user }));
+app.get('/', (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/dashboard');
+  res.render('home', { user: req.user, stats: getLiveStats(), pageTitle: 'Home' });
+});
+
+app.get('/api/stats', (req, res) => {
+  const stats = getLiveStats();
+  delete stats.install_id;
+  res.json({ ok: true, stats });
+});
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
   res.render('login', { error: req.query.error || null, pageTitle: 'Login' });
