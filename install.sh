@@ -7,7 +7,7 @@ IFS=$'\n\t'
 # without removing the integrity check below and the FusionDash branding.
 # Checksum line is updated automatically by scripts/sign-installer.sh
 
-SCRIPT_CHECKSUM="daf60159e3ff71364958fd97127d03ebb4dc21ab37a7521919042622ad7ffb36"
+SCRIPT_CHECKSUM="063bc24c338db6e3fdf16191c84d9b9863e6097928888f3e9fe88f36c8587221"
 SCRIPT_VERSION="1.0.0"
 REPO_URL="https://github.com/lagging-human/FusionDash"
 
@@ -326,6 +326,31 @@ pm2_startup_cmd=$(pm2 startup systemd -u root --hp /root 2>&1 | grep "^sudo" || 
 [[ -n "$pm2_startup_cmd" ]] && eval "$pm2_startup_cmd" 2>/dev/null || true
 pm2 save
 ok "FusionDash running"
+
+step "First admin user"
+echo ""
+ask "Create an admin user now? [Y/n]: " CREATE_ADMIN
+if [[ "${CREATE_ADMIN,,}" != "n" ]]; then
+    ask "Login provider [discord/google]: " ADMIN_PROVIDER
+    ask "Username: " ADMIN_USERNAME
+    ask "Email (must match OAuth account): " ADMIN_EMAIL
+    if [[ -n "$ADMIN_EMAIL" && -n "$ADMIN_USERNAME" ]]; then
+        ADMIN_ID="${ADMIN_PROVIDER}:setup-$(openssl rand -hex 6)"
+        node << NODEJS
+const db  = require('$INSTALL_DIR/db');
+const s   = Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map(r=>[r.key,r.value]));
+db.prepare('INSERT INTO users(id,provider,username,email,avatar,is_admin,coins,res_memory,res_disk,res_cpu,res_ports,res_databases,res_backups)VALUES(?,?,?,?,NULL,1,0,?,?,?,2,1,1)')
+  .run('$ADMIN_ID','$ADMIN_PROVIDER','$ADMIN_USERNAME','$ADMIN_EMAIL',
+    parseInt(s.default_memory||6144), parseInt(s.default_disk||5120), parseInt(s.default_cpu||80));
+console.log('done');
+NODEJS
+        ok "Admin created — log in via $ADMIN_PROVIDER using $ADMIN_EMAIL"
+    else
+        warn "Skipped — email or username missing."
+    fi
+else
+    info "Skipped. Run:  cd $INSTALL_DIR && npm run create:user"
+fi
 
 echo ""
 echo -e "${BOLD}${GREEN}Installation complete!${NC}"

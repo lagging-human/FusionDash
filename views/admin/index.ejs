@@ -136,6 +136,104 @@
           </div>
         </div>
 
+        <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+          <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+            <%- icon('refresh', 'h-4 w-4 text-zinc-400') %>
+            <p class="text-sm font-semibold text-white">Server Renewal</p>
+            <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+              <%= settings.renewal_enabled === '1' ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
+              <%= settings.renewal_enabled === '1' ? 'Enabled' : 'Disabled' %>
+            </span>
+          </div>
+          <div class="p-5">
+            <p class="text-xs text-zinc-500 mb-4">
+              When enabled, users must renew servers with coins every N days or they get suspended for a grace period then permanently deleted.
+            </p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div class="col-span-2 sm:col-span-4">
+                <label class="flex items-center gap-x-3 cursor-pointer select-none">
+                  <div class="relative">
+                    <input type="checkbox" name="renewal_enabled" value="1" id="renewalToggle"
+                      <%= settings.renewal_enabled === '1' ? 'checked' : '' %>
+                      class="sr-only peer">
+                    <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+                    <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                  </div>
+                  <span class="text-sm text-zinc-300">Enable renewal system</span>
+                </label>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Renewal price (coins)</label>
+                <input type="number" name="renewal_price" value="<%= settings.renewal_price || 5 %>" min="0"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Renewal period (days)</label>
+                <input type="number" name="renewal_days" value="<%= settings.renewal_days || 30 %>" min="1"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Grace period (days before delete)</label>
+                <input type="number" name="renewal_grace_days" value="<%= settings.renewal_grace_days || 1 %>" min="0"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+              </div>
+            </div>
+            <p class="mt-3 text-xs text-zinc-600">
+              Cron job to process renewals every 30 min:
+              <code class="text-zinc-500 ml-1">*/30 * * * * curl -sX POST http://localhost:3000/internal/process-renewals</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+          <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+            <%- icon('list', 'h-4 w-4 text-zinc-400') %>
+            <p class="text-sm font-semibold text-white">Server Creation Queue</p>
+            <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+              <%= settings.queue_enabled !== '0' ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
+              <%= settings.queue_enabled !== '0' ? 'Enabled' : 'Disabled' %>
+            </span>
+          </div>
+          <div class="p-5">
+            <p class="text-xs text-zinc-500 mb-4">
+              Controls how fast servers are created. Use the delay to prevent overloading a node when many users sign up at once.
+              10 users × 2 min delay = servers ready within 20 minutes.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="sm:col-span-3">
+                <label class="flex items-center gap-x-3 cursor-pointer select-none">
+                  <div class="relative">
+                    <input type="checkbox" name="queue_enabled" value="1" id="queueToggle"
+                      <%= settings.queue_enabled !== '0' ? 'checked' : '' %>
+                      class="sr-only peer">
+                    <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+                    <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                  </div>
+                  <span class="text-sm text-zinc-300">Enable queue</span>
+                </label>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Delay between jobs (seconds)</label>
+                <input type="number" name="queue_delay_seconds" value="<%= settings.queue_delay_seconds || 120 %>" min="0"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+                <p class="text-xs text-zinc-700 mt-1">120 = 2 min between each job</p>
+              </div>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1">Max parallel creates</label>
+                <input type="number" name="queue_max_parallel" value="<%= settings.queue_max_parallel || 1 %>" min="1" max="10"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+                <p class="text-xs text-zinc-700 mt-1">Keep at 1 unless your node is powerful</p>
+              </div>
+              <div class="flex items-end">
+                <div class="rounded-xl bg-zinc-900/60 border border-white/[0.04] px-4 py-3 w-full">
+                  <p class="text-xs text-zinc-500 mb-1">ETA for 10 users (calculated)</p>
+                  <p class="text-sm font-semibold text-white" id="etaPreview">—</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
           Save Settings
         </button>
@@ -460,6 +558,20 @@
 
 <script>
   const tabs = ['settings','apis','plans','store','servers','users','txns'];
+
+  // Live ETA preview calculator in settings tab
+  function updateEta() {
+    const delay = parseInt(document.querySelector('[name=queue_delay_seconds]')?.value || '120', 10);
+    const parallel = Math.max(1, parseInt(document.querySelector('[name=queue_max_parallel]')?.value || '1', 10));
+    const users = 10;
+    const totalSeconds = Math.ceil(users / parallel) * delay;
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    const el = document.getElementById('etaPreview');
+    if (el) el.textContent = mins > 0 ? `~${mins}m ${secs > 0 ? secs + 's' : ''}` : `~${secs}s`;
+  }
+  document.addEventListener('input', updateEta);
+  setTimeout(updateEta, 200);
 
   function switchTab(id) {
     // Restore from URL hash on load

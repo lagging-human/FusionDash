@@ -108,8 +108,32 @@ CREATE TABLE IF NOT EXISTS store_items (
   active      INTEGER DEFAULT 1
 );
 
--- Coin transaction log
-CREATE TABLE IF NOT EXISTS coin_log (
+-- Admin audit log
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_id    TEXT NOT NULL,
+  admin_name  TEXT,
+  action      TEXT NOT NULL,   -- e.g. 'server.delete', 'user.toggle_admin', 'plan.update'
+  target_type TEXT,            -- 'server' | 'user' | 'plan' | 'store_item' | 'settings'
+  target_id   TEXT,
+  target_name TEXT,
+  detail      TEXT,            -- JSON blob of before/after or extra context
+  ip          TEXT,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
+-- Server creation queue
+CREATE TABLE IF NOT EXISTS server_queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     TEXT NOT NULL,
+  payload     TEXT NOT NULL,   -- JSON: { name, nestId, eggId, nodeId, specs, description, plan }
+  status      TEXT DEFAULT 'pending',  -- pending | processing | done | failed
+  error       TEXT,
+  server_id   INTEGER,         -- set when done
+  created_at  TEXT DEFAULT (datetime('now')),
+  started_at  TEXT,
+  finished_at TEXT
+);
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     TEXT NOT NULL,
   delta       INTEGER NOT NULL,  -- positive = earned, negative = spent
@@ -129,6 +153,8 @@ const migrations = [
   `ALTER TABLE servers ADD COLUMN billing_cycle_end TEXT`,
   `ALTER TABLE servers ADD COLUMN description TEXT`,
   `ALTER TABLE servers ADD COLUMN ports INTEGER DEFAULT 1`,
+  `ALTER TABLE servers ADD COLUMN renewal_due TEXT`,
+  `ALTER TABLE servers ADD COLUMN renewal_suspended INTEGER DEFAULT 0`,
   `ALTER TABLE transactions ADD COLUMN type TEXT DEFAULT 'new'`,
   `ALTER TABLE users ADD COLUMN coins INTEGER DEFAULT 0`,
   `ALTER TABLE users ADD COLUMN res_memory INTEGER DEFAULT 0`,
@@ -182,6 +208,15 @@ const defaultSettings = {
   // Branding
   app_name:            'FusionDash',
   app_favicon_url:     '',
+  // Server renewal
+  renewal_enabled:     '0',
+  renewal_price:       '5',
+  renewal_days:        '30',
+  renewal_grace_days:  '1',
+  // Queue
+  queue_enabled:       '1',
+  queue_delay_seconds: '120',   // seconds between each server creation
+  queue_max_parallel:  '1',     // how many panel creates can run at once
   // Dashboard info
   dashboard_url:           'http://localhost:3000',
 };
@@ -223,6 +258,8 @@ const newSettings = {
   paymentwall_app_key: '', paymentwall_secret_key: '',
   paymentwall_widget: 'mw6', paymentwall_coins: '30',
   notik_api_key: '', notik_secret_key: '', notik_coins: '25', notik_offer_url: '',
-  app_name: 'FusionDash', app_favicon_url: ''
+  app_name: 'FusionDash', app_favicon_url: '',
+  renewal_enabled: '0', renewal_price: '5', renewal_days: '30', renewal_grace_days: '1',
+  queue_enabled: '1', queue_delay_seconds: '120', queue_max_parallel: '1'
 };
 for (const [k,v] of Object.entries(newSettings)) ins.run(k, v);

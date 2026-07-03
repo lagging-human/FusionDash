@@ -8,6 +8,9 @@ const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
 const { icon } = require('./icons');
 const { getLiveStats, getOrCreateInstallId } = require('./telemetry');
+const { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob } = require('./queue');
+const { audit } = require('./audit');
+const { firstRunSetup } = require('./first-run');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -193,8 +196,15 @@ app.get('/dashboard', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
   const plans   = getAllPlans.all();
   const free    = freeResources(req.user);
+  const s       = settingsObj();
+  const renewal = {
+    enabled:    s.renewal_enabled    === '1',
+    price:      parseInt(s.renewal_price    || '5',  10),
+    days:       parseInt(s.renewal_days     || '30', 10),
+    graceDays:  parseInt(s.renewal_grace_days || '1', 10),
+  };
   res.render('dashboard', {
-    user: req.user, servers, plans, free, pageTitle: 'Dashboard',
+    user: req.user, servers, plans, free, renewal, pageTitle: 'Dashboard',
     error: req.query.error||null, success: req.query.success||null
   });
 });
@@ -260,31 +270,25 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
   const dashUrl = s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000';
   const description = `Managed by ${dashUrl}`;
 
-  try {
-    const specs  = { memory, disk, cpu, databases, backups };
-    const result = await ptero.createServer({
-      panelUserId: req.user.pterodactyl_user_id, name, nestId, eggId, nodeId, specs, description
-    });
-
-    insertServer.run({
-      user_id: req.user.id,
-      pterodactyl_server_id:  result.attributes.id,
-      pterodactyl_identifier: result.attributes.identifier,
-      name, description, plan: 'free',
-      egg_id: eggId, nest_id: nestId, node_id: nodeId,
-      memory, disk, cpu, ports, databases, backups,
-      subscription_active: 0, subscription_gateway: null,
-      billing_cycle_start: null, billing_cycle_end: null
-    });
-
-    consumeResources(req.user.id, { memory, disk, cpu, ports, databases, backups });
-
-    res.redirect('/dashboard?success=' + encodeURIComponent('Server created!'));
-  } catch (err) {
-    console.error(err.response?.data||err.message);
-    const msg = err.response?.data?.errors?.[0]?.detail || err.message || 'Failed to create server.';
-    res.redirect('/servers/create?error=' + encodeURIComponent(msg));
+  let renewalDue = null;
+  if (s.renewal_enabled === '1') {
+    const d = new Date();
+    d.setDate(d.getDate() + parseInt(s.renewal_days || '30', 10));
+    renewalDue = d.toISOString();
   }
+
+  // Consume resources immediately (reserved while queued)
+  consumeResources(req.user.id, { memory, disk, cpu, ports, databases, backups });
+
+  const jobId = enqueue(req.user.id, {
+    name, description, nestId, eggId, nodeId,
+    plan: 'free',
+    specs: { memory, disk, cpu, ports, databases, backups },
+    subscription_active: 0, subscription_gateway: null,
+    billing_cycle_start: null, billing_cycle_end: null,
+  });
+
+  res.redirect('/dashboard?success=' + encodeURIComponent('Server queued! It will be ready in a moment. Job #' + jobId));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,6 +352,94 @@ app.post('/servers/:id/cancel-subscription', ensureAuth, (req, res) => {
   db.prepare('UPDATE servers SET subscription_active=2 WHERE id=?').run(server.id);
   const end = server.billing_cycle_end ? new Date(server.billing_cycle_end).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : 'end of cycle';
   res.redirect('/account?success=' + encodeURIComponent(`Subscription cancelled. Server stays active until ${end}.`));
+});
+
+// ── Server renewal (coin-based) ────────────────────────────
+app.post('/servers/:id/renew', ensureAuth, async (req, res) => {
+  const server = getServerById.get(req.params.id);
+  if (!server || server.user_id !== req.user.id) return res.status(404).render('error', { message: 'Not found.' });
+
+  const s = settingsObj();
+  if (s.renewal_enabled !== '1') return res.redirect('/dashboard?error=' + encodeURIComponent('Renewal is not enabled.'));
+
+  const price = parseInt(s.renewal_price || '5', 10);
+  const days  = parseInt(s.renewal_days  || '30', 10);
+  const user  = getUser.get(req.user.id);
+
+  if (user.coins < price) {
+    return res.redirect('/dashboard?error=' + encodeURIComponent(`Not enough coins. You need ${price} coins to renew. You have ${user.coins}.`));
+  }
+
+  // Deduct coins and extend renewal_due
+  addCoins(req.user.id, -price, 'server_renewal', `server:${server.id}`);
+  const newDue = new Date();
+  newDue.setDate(newDue.getDate() + days);
+  db.prepare('UPDATE servers SET renewal_due=?, renewal_suspended=0 WHERE id=?').run(newDue.toISOString(), server.id);
+
+  // Unsuspend on panel if it was suspended
+  if (server.renewal_suspended === 1) {
+    try {
+      await ptero.api.post(`/servers/${server.pterodactyl_server_id}/unsuspend`);
+    } catch (err) {
+      console.error('Unsuspend failed:', err.response?.data || err.message);
+    }
+  }
+
+  res.redirect('/dashboard?success=' + encodeURIComponent(`Server renewed for ${days} days!`));
+});
+
+// ── Renewal cron — call via POST /internal/process-renewals ──
+// Run this from cron: curl -sX POST http://localhost:3000/internal/process-renewals
+// Or set up a cron job: */30 * * * * curl -sX POST http://localhost:3000/internal/process-renewals
+app.post('/internal/process-renewals', async (req, res) => {
+  const s = settingsObj();
+  if (s.renewal_enabled !== '1') return res.json({ skipped: true, reason: 'renewal disabled' });
+
+  const graceDays = parseInt(s.renewal_grace_days || '1', 10);
+  const now = new Date();
+  const results = [];
+
+  // Servers where renewal_due has passed and not yet suspended
+  const overdue = db.prepare(`
+    SELECT * FROM servers
+    WHERE renewal_due IS NOT NULL
+      AND renewal_due < ?
+      AND renewal_suspended = 0
+  `).all(now.toISOString());
+
+  for (const server of overdue) {
+    const dueDate = new Date(server.renewal_due);
+    const daysPast = Math.floor((now - dueDate) / 86400000);
+
+    if (daysPast >= graceDays) {
+      // Grace period expired — delete the server
+      try {
+        await ptero.deleteServer(server.pterodactyl_server_id, true);
+        returnResources(server.user_id, {
+          memory: server.memory, disk: server.disk, cpu: server.cpu,
+          ports: server.ports || 1, databases: server.databases || 0, backups: server.backups || 0
+        });
+        deleteServerRow.run(server.id);
+        results.push({ id: server.id, action: 'deleted', reason: 'grace_expired' });
+
+        // Notify via coin log so user sees it
+        addCoins(server.user_id, 0, 'server_deleted_no_renewal', `server:${server.id}:${server.name}`);
+      } catch (err) {
+        results.push({ id: server.id, action: 'delete_failed', error: err.message });
+      }
+    } else {
+      // Within grace period — suspend
+      try {
+        await ptero.api.post(`/servers/${server.pterodactyl_server_id}/suspend`);
+        db.prepare('UPDATE servers SET renewal_suspended=1 WHERE id=?').run(server.id);
+        results.push({ id: server.id, action: 'suspended', days_overdue: daysPast });
+      } catch (err) {
+        results.push({ id: server.id, action: 'suspend_failed', error: err.message });
+      }
+    }
+  }
+
+  res.json({ processed: results.length, results });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -694,9 +786,12 @@ app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
     'daily_coins','workink_coins','workink_api_key','workink_offer_id',
     'paymentwall_app_key','paymentwall_secret_key','paymentwall_widget','paymentwall_coins',
     'notik_api_key','notik_secret_key','notik_coins','notik_offer_url',
-    'dashboard_url','app_name','app_favicon_url'
+    'dashboard_url','app_name','app_favicon_url',
+    'renewal_enabled','renewal_price','renewal_days','renewal_grace_days',
+    'queue_enabled','queue_delay_seconds','queue_max_parallel'
   ];
   for (const f of fields) if (req.body[f] !== undefined) setSetting(f, req.body[f]);
+  audit(req.user, 'settings.update', { type:'settings', id:'global', name:'Settings' }, { fields: fields.filter(f => req.body[f] !== undefined) }, req.ip);
   res.redirect('/admin?success=Settings+updated.#settings');
 });
 
@@ -707,6 +802,7 @@ app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
   try {
     await ptero.updateServerBuild(server.pterodactyl_server_id, specs);
     db.prepare('UPDATE servers SET memory=?,disk=?,cpu=?,databases=?,backups=? WHERE id=?').run(specs.memory,specs.disk,specs.cpu,specs.databases,specs.backups,server.id);
+    audit(req.user, 'server.update_specs', { type:'server', id:server.id, name:server.name }, { before:{memory:server.memory,disk:server.disk,cpu:server.cpu}, after:specs }, req.ip);
     res.redirect('/admin?success=Specs+updated.');
   } catch(err) { res.redirect('/admin?error=Failed+to+update+specs.'); }
 });
@@ -718,6 +814,7 @@ app.post('/admin/servers/:id/delete', ensureAdmin, async (req, res) => {
     await ptero.deleteServer(server.pterodactyl_server_id, true);
     returnResources(server.user_id, { memory:server.memory, disk:server.disk, cpu:server.cpu, ports:server.ports||1, databases:server.databases||0, backups:server.backups||0 });
     deleteServerRow.run(server.id);
+    audit(req.user, 'server.delete', { type:'server', id:server.id, name:server.name }, { plan:server.plan, user_id:server.user_id }, req.ip);
     res.redirect('/admin?success=Server+deleted.');
   } catch(err) { res.redirect('/admin?error=Failed+to+delete.'); }
 });
@@ -726,6 +823,7 @@ app.post('/admin/users/:id/toggle-admin', ensureAdmin, (req, res) => {
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   if (!u) return res.redirect('/admin?error=Not+found.');
   db.prepare('UPDATE users SET is_admin=? WHERE id=?').run(u.is_admin?0:1,u.id);
+  audit(req.user, u.is_admin ? 'user.revoke_admin' : 'user.grant_admin', { type:'user', id:u.id, name:u.username }, {}, req.ip);
   res.redirect('/admin?success=User+updated.');
 });
 
@@ -734,6 +832,7 @@ app.post('/admin/users/:id/gift-coins', ensureAdmin, (req, res) => {
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   if (!u) return res.redirect('/admin?error=Not+found.');
   addCoins(req.params.id, amt, 'admin_gift', req.user.id);
+  audit(req.user, 'user.gift_coins', { type:'user', id:u.id, name:u.username }, { amount:amt }, req.ip);
   res.redirect('/admin?success=' + encodeURIComponent(`Gifted ${amt} coins to ${u.username}.`));
 });
 
@@ -741,6 +840,8 @@ app.post('/admin/users/:id/set-resources', ensureAdmin, (req, res) => {
   const fields=['res_memory','res_disk','res_cpu','res_ports','res_databases','res_backups'];
   const vals=fields.map(f=>parseInt(req.body[f],10)||0);
   db.prepare(`UPDATE users SET res_memory=?,res_disk=?,res_cpu=?,res_ports=?,res_databases=?,res_backups=? WHERE id=?`).run(...vals, req.params.id);
+  const uForAudit = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  audit(req.user, 'user.set_resources', { type:'user', id:req.params.id, name:uForAudit?.username }, { memory:vals[0],disk:vals[1],cpu:vals[2],ports:vals[3],databases:vals[4],backups:vals[5] }, req.ip);
   res.redirect('/admin?success=Resources+updated.');
 });
 
@@ -748,6 +849,7 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
   db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
     .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
+  audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin?success=Plan+updated.');
 });
 
@@ -755,6 +857,7 @@ app.post('/admin/store/:key', ensureAdmin, (req, res) => {
   const {name,description,resource,amount,cost,active}=req.body;
   db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`)
     .run(name,description,resource,parseInt(amount,10),parseInt(cost,10),active?1:0,req.params.key);
+  audit(req.user, 'store.update_item', { type:'store_item', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin?success=Store+item+updated.');
 });
 
@@ -764,8 +867,49 @@ app.post('/admin/store/new', ensureAdmin, (req, res) => {
   try {
     db.prepare(`INSERT INTO store_items(key,name,description,resource,amount,cost,active) VALUES(?,?,?,?,?,?,1)`)
       .run(key,name,description||'',resource,parseInt(amount,10)||0,parseInt(cost,10)||0);
+    audit(req.user, 'store.create_item', { type:'store_item', id:key, name }, { resource, amount, cost }, req.ip);
     res.redirect('/admin?success=Store+item+created.');
   } catch { res.redirect('/admin?error=Key+already+exists.'); }
+});
+
+// Queue status for the current user (called via JS polling on dashboard)
+app.get('/api/queue', ensureAuth, (req, res) => {
+  const jobs  = getUserQueueStatus(req.user.id);
+  const info  = getQueueInfo();
+  const jobsWithPos = jobs.map(j => ({
+    ...j,
+    position: j.status === 'pending' ? getPositionForJob(j.id) : null,
+  }));
+  res.json({ jobs: jobsWithPos, info });
+});
+
+// Admin: audit log with filtering
+app.get('/admin/audit', ensureAdmin, (req, res) => {
+  const { action, admin, from, to, page: rawPage } = req.query;
+  const page    = Math.max(1, parseInt(rawPage || '1', 10));
+  const perPage = 50;
+  const offset  = (page - 1) * perPage;
+
+  let where = '1=1';
+  const params = [];
+  if (action) { where += ' AND action LIKE ?';      params.push(`%${action}%`); }
+  if (admin)  { where += ' AND admin_name LIKE ?';  params.push(`%${admin}%`); }
+  if (from)   { where += ' AND created_at >= ?';    params.push(from); }
+  if (to)     { where += ' AND created_at <= ?';    params.push(to + ' 23:59:59'); }
+
+  const total = db.prepare(`SELECT COUNT(*) as n FROM audit_log WHERE ${where}`).get(...params).n;
+  const logs  = db.prepare(`SELECT * FROM audit_log WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+                  .all(...params, perPage, offset);
+
+  const actions = db.prepare('SELECT DISTINCT action FROM audit_log ORDER BY action').all().map(r => r.action);
+
+  res.render('admin/audit', {
+    user: req.user, logs, actions,
+    filters: { action: action||'', admin: admin||'', from: from||'', to: to||'' },
+    pagination: { page, perPage, total, pages: Math.ceil(total / perPage) },
+    pageTitle: 'Audit Log',
+    error: req.query.error || null
+  });
 });
 
 // Admin: trigger update check manually
@@ -787,7 +931,10 @@ app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
 // Start
 // ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`FusionDash running on port ${PORT}`);
+  await firstRunSetup();
   startAutoUpdater();
+  startQueue();
+  console.log('[queue] Server creation queue started');
 });

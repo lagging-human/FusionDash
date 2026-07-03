@@ -105,6 +105,10 @@
             const daysLeft = cycleEnd ? Math.max(0, Math.ceil((cycleEnd - Date.now()) / 86400000)) : null;
             const subStatus = server.subscription_active === 1 ? 'active' : server.subscription_active === 2 ? 'cancelled' : null;
             const ago = (() => { const d = Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
+            const renewalDue = server.renewal_due ? new Date(server.renewal_due) : null;
+            const renewalDaysLeft = renewalDue ? Math.ceil((renewalDue - Date.now()) / 86400000) : null;
+            const renewalOverdue = renewalDaysLeft !== null && renewalDaysLeft <= 0;
+            const renewalSoon   = renewalDaysLeft !== null && renewalDaysLeft > 0 && renewalDaysLeft <= 3;
           %>
           <tr class="hover:bg-white/[0.015] transition-colors">
             <td class="py-3.5 pl-4 pr-6">
@@ -152,7 +156,32 @@
               </div>
             </td>
             <td class="py-3.5 pr-4 text-right">
-              <div class="flex items-center justify-end gap-x-2">
+              <div class="flex items-center justify-end gap-x-2 flex-wrap gap-y-1">
+                <% if (renewal.enabled && renewalDue) { %>
+                  <% if (server.renewal_suspended) { %>
+                    <span class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400">Suspended</span>
+                    <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
+                      <button type="submit" class="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-500/15 transition-colors">
+                        Renew (<%= renewal.price %> coins)
+                      </button>
+                    </form>
+                  <% } else if (renewalOverdue) { %>
+                    <span class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400">Overdue</span>
+                    <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
+                      <button type="submit" class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/15 transition-colors">
+                        Renew now
+                      </button>
+                    </form>
+                  <% } else if (renewalSoon) { %>
+                    <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
+                      <button type="submit" class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/15 transition-colors">
+                        Renew in <%= renewalDaysLeft %>d
+                      </button>
+                    </form>
+                  <% } else { %>
+                    <span class="text-xs text-zinc-600">Due <%= renewalDue.toLocaleDateString('en-IN') %></span>
+                  <% } %>
+                <% } %>
                 <a href="/servers/<%= server.id %>/edit" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Edit</a>
                 <a href="/servers/<%= server.id %>/delete" class="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
               </div>
@@ -231,5 +260,80 @@
   </div>
 
 </div><!-- /.app-main -->
+
+  <!-- Queue status widget (auto-hides when no active jobs) -->
+  <div id="queueWidget" class="hidden fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-blue-500/20 bg-[#0c0d0f] shadow-2xl overflow-hidden">
+    <div class="flex items-center gap-x-2 px-4 py-3 border-b border-white/[0.06] bg-blue-500/5">
+      <div id="queueSpinner" class="h-3 w-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin"></div>
+      <p class="text-xs font-semibold text-blue-400" id="queueHeader">Server Queue</p>
+      <button onclick="document.getElementById('queueWidget').classList.add('hidden')" class="ml-auto text-zinc-600 hover:text-zinc-300">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="queueJobs" class="divide-y divide-white/[0.04] max-h-48 overflow-y-auto"></div>
+  </div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+</style>
+
+<script>
+const statusColor = { pending:'text-zinc-500', processing:'text-blue-400', done:'text-green-400', failed:'text-red-400' };
+const statusLabel = { pending:'Queued', processing:'Creating…', done:'Ready', failed:'Failed' };
+
+function fmtEta(seconds) {
+  if (!seconds || seconds <= 0) return 'soon';
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  return m > 0 ? `~${m}m ${s > 0 ? s+'s' : ''}` : `~${s}s`;
+}
+
+async function pollQueue() {
+  try {
+    const res  = await fetch('/api/queue');
+    const data = await res.json();
+    const active = data.jobs.filter(j => j.status === 'pending' || j.status === 'processing');
+    const widget = document.getElementById('queueWidget');
+    const list   = document.getElementById('queueJobs');
+    const header = document.getElementById('queueHeader');
+
+    if (!data.jobs.length) { widget.classList.add('hidden'); return; }
+    widget.classList.remove('hidden');
+
+    // Header summary
+    if (header && data.info) {
+      const { pending, active: act, etaSeconds } = data.info;
+      header.textContent = act > 0
+        ? `Creating… ${pending > 0 ? pending + ' queued · ETA ' + fmtEta(etaSeconds) : ''}`
+        : pending > 0 ? `${pending} in queue · ETA ${fmtEta(etaSeconds)}` : 'Queue idle';
+    }
+
+    list.innerHTML = data.jobs.slice(0, 8).map(j => `
+      <div class="px-4 py-2.5 flex items-start justify-between gap-x-3">
+        <div class="min-w-0">
+          <p class="text-xs text-zinc-300 truncate">Job #${j.id}</p>
+          ${j.position ? `<p class="text-[10px] text-zinc-600">Position ${j.position} · ETA ${fmtEta((j.position - 1) * (data.info?.delaySeconds || 120))}</p>` : ''}
+          ${j.error ? `<p class="text-[10px] text-red-400/70 mt-0.5 truncate">${j.error}</p>` : ''}
+        </div>
+        <div class="flex items-center gap-x-1.5 shrink-0">
+          ${j.status === 'processing' ? '<div class="h-2 w-2 rounded-full border border-blue-400 border-t-transparent animate-spin"></div>' : ''}
+          <span class="text-xs font-medium ${statusColor[j.status] || 'text-zinc-500'}">${statusLabel[j.status] || j.status}</span>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('queueSpinner').style.display = active.length ? '' : 'none';
+
+    const justDone = data.jobs.some(j => j.status === 'done' && j.server_id);
+    if (justDone && !window._reloading) {
+      window._reloading = true;
+      setTimeout(() => location.reload(), 2000);
+    }
+  } catch {}
+}
+
+pollQueue();
+setInterval(pollQueue, 3000);
+</script>
 </body>
 </html>
