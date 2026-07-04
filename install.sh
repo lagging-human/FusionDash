@@ -5,10 +5,7 @@ IFS=$'\n\t'
 # FusionDash Installer — github.com/lagging-human/FusionDash
 # Maintained by @lagging-human. Do not redistribute modified versions
 # without removing the integrity check below and the FusionDash branding.
-# Checksum line is updated automatically by scripts/sign-installer.sh
 
-SCRIPT_CHECKSUM="063bc24c338db6e3fdf16191c84d9b9863e6097928888f3e9fe88f36c8587221"
-SCRIPT_VERSION="1.0.0"
 REPO_URL="https://github.com/lagging-human/FusionDash"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -22,45 +19,6 @@ step()    { echo -e "\n${BOLD}${CYAN}── $* ──${NC}"; }
 ask()     { read -rp "  $1" "$2"; }
 askblank(){ read -rp "  $1" "$2" || true; }
 
-verify_integrity() {
-  if [[ "$SCRIPT_CHECKSUM" == "UNSIGNED" ]]; then
-    warn "This installer has not been signed."
-    warn "Download the official version from:"
-    warn "  $REPO_URL/releases"
-    echo ""
-    ask "Continue with unsigned installer? [y/N]: " UNSIGNED_OK
-    [[ "${UNSIGNED_OK,,}" == "y" ]] || die "Aborted. Get the official installer from $REPO_URL"
-    return
-  fi
-
-  local script_path
-  script_path="$(realpath "$0")"
-
-  # Compute checksum of this file excluding the SCRIPT_CHECKSUM line itself
-  local computed
-  computed=$(grep -v '^SCRIPT_CHECKSUM=' "$script_path" | sha256sum | awk '{print $1}')
-
-  if [[ "$computed" != "$SCRIPT_CHECKSUM" ]]; then
-    echo -e "${RED}"
-    echo "  ┌─────────────────────────────────────────────────────┐"
-    echo "  │           INTEGRITY CHECK FAILED                    │"
-    echo "  │                                                     │"
-    echo "  │  This installer has been modified from the official │"
-    echo "  │  FusionDash release. It may contain malicious code. │"
-    echo "  │                                                     │"
-    echo "  │  Get the official installer:                        │"
-    echo "  │  $REPO_URL/releases"
-    echo "  │                                                     │"
-    echo "  │  Expected: $SCRIPT_CHECKSUM      │"
-    echo "  │  Got:      $computed      │"
-    echo "  └─────────────────────────────────────────────────────┘"
-    echo -e "${NC}"
-    die "Aborting to protect your server."
-  fi
-
-  ok "Installer integrity verified (sha256: ${computed:0:16}…)"
-}
-
 [[ $EUID -ne 0 ]] && die "Run as root:  sudo bash install.sh"
 
 clear
@@ -72,9 +30,7 @@ cat << 'BANNER'
  |_|   \_,_| |_| /__/   |___/ \__,_||_|  \__|
 BANNER
 echo -e "${NC}${BOLD}  $REPO_URL${NC}"
-echo -e "  v$SCRIPT_VERSION  ·  Ubuntu 22.04 / 24.04  ·  Node 22 LTS  ·  Nginx  ·  Let's Encrypt\n"
-
-verify_integrity
+echo -e "  Ubuntu 22.04 / 24.04  ·  Node 22 LTS  ·  Nginx  ·  Let's Encrypt\n"
 
 step "Configuration"
 
