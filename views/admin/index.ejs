@@ -24,14 +24,14 @@
     <div>
       <p class="text-sm font-semibold text-white">Admin Panel</p>
       <p class="text-xs text-zinc-500 mt-0.5">
-        <span class="text-zinc-300"><%= users.length %></span> users &nbsp;·&nbsp;
-        <span class="text-zinc-300"><%= servers.length %></span> servers &nbsp;·&nbsp;
+        <span class="text-zinc-300"><%= users.length %></span> users &nbsp;Â·&nbsp;
+        <span class="text-zinc-300"><%= servers.length %></span> servers &nbsp;Â·&nbsp;
         <span class="text-zinc-300"><%= transactions.filter(t=>t.status==='paid').length %></span> paid txns
       </p>
     </div>
     <form action="/admin/update" method="POST">
       <button type="submit" class="rounded-full bg-zinc-700/50 px-4 py-2 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-zinc-700 transition-colors">
-        ↑ Check for Updates
+        â†‘ Check for Updates
       </button>
     </form>
   </div>
@@ -61,7 +61,7 @@
   <!-- Tab panels -->
   <div class="px-4 sm:px-6 lg:px-8 py-6 pb-20">
 
-    <!-- ── SETTINGS ──────────────────────────────────────── -->
+    <!-- â”€â”€ SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-settings" class="tab-panel space-y-6">
       <form action="/admin/settings/defaults" method="POST" class="space-y-6">
 
@@ -69,7 +69,7 @@
           <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
             <%- icon('gift', 'h-4 w-4 text-zinc-400') %>
             <p class="text-sm font-semibold text-white">Default Resource Pool</p>
-            <p class="text-xs text-zinc-500 ml-1">— given to every new user on first login</p>
+            <p class="text-xs text-zinc-500 ml-1">â€” given to every new user on first login</p>
           </div>
           <div class="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <% [['default_memory','RAM (MB)'],['default_disk','Disk (MB)'],['default_cpu','CPU (%)'],
@@ -197,7 +197,7 @@
           <div class="p-5">
             <p class="text-xs text-zinc-500 mb-4">
               Controls how fast servers are created. Use the delay to prevent overloading a node when many users sign up at once.
-              10 users × 2 min delay = servers ready within 20 minutes.
+              10 users Ã— 2 min delay = servers ready within 20 minutes.
             </p>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div class="sm:col-span-3">
@@ -227,7 +227,7 @@
               <div class="flex items-end">
                 <div class="rounded-xl bg-zinc-900/60 border border-white/[0.04] px-4 py-3 w-full">
                   <p class="text-xs text-zinc-500 mb-1">ETA for 10 users (calculated)</p>
-                  <p class="text-sm font-semibold text-white" id="etaPreview">—</p>
+                  <p class="text-sm font-semibold text-white" id="etaPreview">â€”</p>
                 </div>
               </div>
             </div>
@@ -240,7 +240,7 @@
       </form>
     </div>
 
-    <!-- ── EARN APIs ──────────────────────────────────────── -->
+    <!-- â”€â”€ EARN APIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-apis" class="tab-panel hidden space-y-4">
       <form action="/admin/settings/defaults" method="POST" class="space-y-4">
 
@@ -249,7 +249,7 @@
           <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
             <%- icon('link', 'h-4 w-4 text-zinc-400') %>
             <p class="text-sm font-semibold text-white">Work.ink</p>
-            <a href="https://work.ink/developers" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+            <a href="https://work.ink/developers" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs â†’</a>
           </div>
           <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -274,7 +274,7 @@
           <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
             <%- icon('card', 'h-4 w-4 text-zinc-400') %>
             <p class="text-sm font-semibold text-white">Paymentwall Offerwall</p>
-            <a href="https://docs.paymentwall.com/integration/widget/offerwall" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+            <a href="https://docs.paymentwall.com/integration/widget/offerwall" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs â†’</a>
           </div>
           <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -306,7 +306,7 @@
           <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
             <%- icon('bolt', 'h-4 w-4 text-zinc-400') %>
             <p class="text-sm font-semibold text-white">Notik</p>
-            <a href="https://notik.me" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Dashboard →</a>
+            <a href="https://notik.me" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Dashboard â†’</a>
           </div>
           <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -337,7 +337,7 @@
       </form>
     </div>
 
-    <!-- ── PLANS ──────────────────────────────────────────── -->
+    <!-- â”€â”€ PLANS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-plans" class="tab-panel hidden space-y-4">
       <% plans.forEach(plan => { %>
       <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
@@ -371,7 +371,7 @@
       <% }) %>
     </div>
 
-    <!-- ── STORE ITEMS ────────────────────────────────────── -->
+    <!-- â”€â”€ STORE ITEMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-store" class="tab-panel hidden space-y-4">
       <!-- Add new item -->
       <div class="rounded-2xl border border-blue-500/20 bg-blue-500/5 overflow-hidden">
@@ -426,7 +426,7 @@
       <% }) %>
     </div>
 
-    <!-- ── SERVERS ─────────────────────────────────────────── -->
+    <!-- â”€â”€ SERVERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-servers" class="tab-panel hidden space-y-3">
       <% if (!servers.length) { %>
       <div class="rounded-2xl border border-dashed border-white/10 py-12 text-center"><p class="text-sm text-zinc-500">No servers yet.</p></div>
@@ -461,7 +461,7 @@
       <% }) %>
     </div>
 
-    <!-- ── USERS ───────────────────────────────────────────── -->
+    <!-- â”€â”€ USERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-users" class="tab-panel hidden space-y-3">
       <% if (!users.length) { %>
       <div class="rounded-2xl border border-dashed border-white/10 py-12 text-center"><p class="text-sm text-zinc-500">No users yet.</p></div>
@@ -474,7 +474,7 @@
           <% } %>
           <div class="min-w-0 flex-1">
             <p class="text-sm font-semibold text-white truncate"><%= u.username %> <% if (u.is_admin) { %><span class="ml-1 text-xs text-indigo-400">(admin)</span><% } %></p>
-            <p class="text-xs text-zinc-500 truncate"><%= u.email %> &middot; via <%= u.provider %> &middot; Panel ID: <%= u.pterodactyl_user_id||'—' %></p>
+            <p class="text-xs text-zinc-500 truncate"><%= u.email %> &middot; via <%= u.provider %> &middot; Panel ID: <%= u.pterodactyl_user_id||'â€”' %></p>
           </div>
           <div class="flex items-center gap-x-1.5 text-sm text-yellow-400 shrink-0"><%- icon('coin', 'h-4 w-4') %> <span class="font-bold"><%= u.coins %></span></div>
         </div>
@@ -513,7 +513,7 @@
       <% }) %>
     </div>
 
-    <!-- ── TRANSACTIONS ───────────────────────────────────── -->
+    <!-- â”€â”€ TRANSACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-txns" class="tab-panel hidden">
       <div class="rounded-2xl border border-white/[0.06] overflow-x-auto">
         <table class="w-full text-left text-sm min-w-[640px]">
@@ -537,7 +537,7 @@
               <td class="py-3 pl-4 pr-6 text-zinc-300 text-xs"><%= t.username %></td>
               <td class="py-3 pr-6 text-zinc-400 capitalize text-xs"><%= t.plan_key %></td>
               <td class="py-3 pr-6 text-zinc-400 capitalize text-xs"><%= t.gateway %></td>
-              <td class="py-3 pr-6 text-white text-xs font-medium"><%= t.currency==='INR'?'₹':'$' %><%= Number(t.amount).toFixed(2) %></td>
+              <td class="py-3 pr-6 text-white text-xs font-medium"><%= t.currency==='INR'?'â‚¹':'$' %><%= Number(t.amount).toFixed(2) %></td>
               <td class="py-3 pr-6 text-zinc-500 capitalize text-xs"><%= t.type %></td>
               <td class="py-3 pr-6 text-xs">
                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
@@ -554,7 +554,7 @@
     </div>
 
 
-    <!-- ── EGGS ──────────────────────────────────────────── -->
+    <!-- â”€â”€ EGGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div id="tab-eggs" class="tab-panel hidden space-y-4">
 
       <!-- Sync from panel -->
