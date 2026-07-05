@@ -135,6 +135,17 @@ CREATE TABLE IF NOT EXISTS server_queue (
   finished_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS eggs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  nest_id     INTEGER NOT NULL,
+  egg_id      INTEGER NOT NULL,
+  nest_name   TEXT,
+  egg_name    TEXT NOT NULL,
+  description TEXT,
+  active      INTEGER DEFAULT 1,
+  UNIQUE(nest_id, egg_id)
+);
+
 CREATE TABLE IF NOT EXISTS coin_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     TEXT NOT NULL,
@@ -142,6 +153,19 @@ CREATE TABLE IF NOT EXISTS coin_log (
   reason      TEXT,
   ref         TEXT,
   created_at  TEXT DEFAULT (datetime('now'))
+);
+
+-- Allowed eggs (admin curates which eggs users can pick from)
+CREATE TABLE IF NOT EXISTS allowed_eggs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  nest_id     INTEGER NOT NULL,
+  egg_id      INTEGER NOT NULL,
+  nest_name   TEXT,
+  egg_name    TEXT,
+  description TEXT,
+  active      INTEGER DEFAULT 1,
+  created_at  TEXT DEFAULT (datetime('now')),
+  UNIQUE(nest_id, egg_id)
 );
 `);
 
@@ -256,6 +280,13 @@ insPlan.run({ key:'ultra', name:'Ultra', price_inr:49900, price_usd:7,   memory:
 module.exports = db;
 
 // Safe migration for new settings
+// Eggs table migration for existing installs
+try { db.exec(`CREATE TABLE IF NOT EXISTS eggs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nest_id INTEGER NOT NULL, egg_id INTEGER NOT NULL,
+  nest_name TEXT, egg_name TEXT NOT NULL, description TEXT, active INTEGER DEFAULT 1,
+  UNIQUE(nest_id, egg_id))`); } catch {}
+
 const newSettings = {
   paymentwall_app_key: '', paymentwall_secret_key: '',
   paymentwall_widget: 'mw6', paymentwall_coins: '30',
@@ -265,3 +296,4 @@ const newSettings = {
   queue_enabled: '1', queue_delay_seconds: '120', queue_max_parallel: '1'
 };
 for (const [k,v] of Object.entries(newSettings)) ins.run(k, v);
+  
