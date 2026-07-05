@@ -424,4 +424,597 @@ app.post('/internal/process-renewals', async (req, res) => {
   `).all(now.toISOString());
 
   for (const server of overdue) {
-    const dueDate = new 
+    const dueDate = new Date(server.renewal_due);
+    const daysPast = Math.floor((now - dueDate) / 86400000);
+
+    if (daysPast >= graceDays) {
+      // Grace period expired — delete the server
+      try {
+        await ptero.deleteServer(server.pterodactyl_server_id, true);
+        returnResources(server.user_id, {
+          memory: server.memory, disk: server.disk, cpu: server.cpu,
+          ports: server.ports || 1, databases: server.databases || 0, backups: server.backups || 0
+        });
+        deleteServerRow.run(server.id);
+        results.push({ id: server.id, action: 'deleted', reason: 'grace_expired' });
+
+        // Notify via coin log so user sees it
+        addCoins(server.user_id, 0, 'server_deleted_no_renewal', `server:${server.id}:${server.name}`);
+      } catch (err) {
+        results.push({ id: server.id, action: 'delete_failed', error: err.message });
+      }
+    } else {
+      // Within grace period — suspend
+      try {
+        await ptero.api.post(`/servers/${server.pterodactyl_server_id}/suspend`);
+        db.prepare('UPDATE servers SET renewal_suspended=1 WHERE id=?').run(server.id);
+        results.push({ id: server.id, action: 'suspended', days_overdue: daysPast });
+      } catch (err) {
+        results.push({ id: server.id, action: 'suspend_failed', error: err.message });
+      }
+    }
+  }
+
+  res.json({ processed: results.length, results });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Store  /store
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/store', ensureAuth, (req, res) => {
+  const items = getStoreItems.all();
+  res.render('store/index', {
+    user: req.user, items, pageTitle: 'Store',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.post('/store/buy/:key', ensureAuth, (req, res) => {
+  const item = db.prepare('SELECT * FROM store_items WHERE key=? AND active=1').get(req.params.key);
+  if (!item) return res.redirect('/store?error=' + encodeURIComponent('Item not found.'));
+
+  const qty  = Math.min(Math.max(parseInt(req.body.qty, 10) || 1, 1), 100); // clamp 1-100
+  const total = item.cost * qty;
+
+  const user = getUser.get(req.user.id);
+  if (user.coins < total) {
+    return res.redirect('/store?error=' + encodeURIComponent(`Not enough coins. You have ${user.coins}, need ${total} (${qty}x).`));
+  }
+
+  addCoins(req.user.id, -total, 'store_purchase', `${item.key}x${qty}`);
+
+  const grant = item.amount * qty;
+  if (item.resource === 'memory')    db.prepare('UPDATE users SET res_memory=res_memory+?       WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'disk')      db.prepare('UPDATE users SET res_disk=res_disk+?           WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'cpu')       db.prepare('UPDATE users SET res_cpu=res_cpu+?             WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'ports')     db.prepare('UPDATE users SET res_ports=res_ports+?         WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'databases') db.prepare('UPDATE users SET res_databases=res_databases+? WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'backups')   db.prepare('UPDATE users SET res_backups=res_backups+?     WHERE id=?').run(grant, req.user.id);
+  if (item.resource === 'coins')     addCoins(req.user.id, grant, 'store_coins', `${item.key}x${qty}`);
+
+  res.redirect('/store?success=' + encodeURIComponent(`Purchased ${qty}x ${item.name}!`));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Earn Coins  /earn
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/earn', ensureAuth, (req, res) => {
+  const s = settingsObj();
+  const user = getUser.get(req.user.id);
+
+  const lastDaily = user.last_daily_claim ? new Date(user.last_daily_claim) : null;
+  const now = new Date();
+  const canClaimDaily = !lastDaily || (now - lastDaily) >= 24 * 3600_000;
+  const dailyNextIn = lastDaily ? Math.max(0, 24*3600 - Math.floor((now-lastDaily)/1000)) : 0;
+
+  const recentLog = db.prepare('SELECT * FROM coin_log WHERE user_id=? ORDER BY id DESC LIMIT 15').all(req.user.id);
+
+  // Build apis object — only pass sections that are configured
+  const apis = {
+    workink:      s.workink_offer_id    ? { offerId: s.workink_offer_id }                                          : null,
+    paymentwall:  s.paymentwall_app_key ? { appKey: s.paymentwall_app_key, widget: s.paymentwall_widget || 'mw6' } : null,
+    notik:        s.notik_api_key       ? { apiKey: s.notik_api_key, offerUrl: s.notik_offer_url }                 : null,
+  };
+
+  res.render('earn/index', {
+    user: req.user,
+    canClaimDaily, dailyNextIn,
+    dailyCoins:    parseInt(s.daily_coins    || '50', 10),
+    workinkCoins:  parseInt(s.workink_coins  || '20', 10),
+    notikCoins:    parseInt(s.notik_coins    || '25', 10),
+    apis, recentLog, pageTitle: 'Earn Coins',
+    error:   req.query.error  || null,
+    success: req.query.success || null
+  });
+});
+
+// Daily claim
+app.post('/earn/daily', ensureAuth, (req, res) => {
+  const user     = getUser.get(req.user.id);
+  const s        = settingsObj();
+  const amt      = parseInt(s.daily_coins||'50', 10);
+  const lastDaily= user.last_daily_claim ? new Date(user.last_daily_claim) : null;
+  const now      = new Date();
+
+  if (lastDaily && (now - lastDaily) < 24*3600_000) {
+    const wait = Math.ceil((24*3600_000 - (now-lastDaily)) / 3600_000);
+    return res.redirect('/earn?error=' + encodeURIComponent(`Already claimed! Come back in ${wait}h.`));
+  }
+
+  addCoins(req.user.id, amt, 'daily', null);
+  db.prepare('UPDATE users SET last_daily_claim=? WHERE id=?').run(nowISO(), req.user.id);
+  res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
+});
+
+// Work.ink verification callback — user completes offer, Work.ink pings our endpoint
+// Docs: https://work.ink/developers  — set postback URL to /earn/workink/callback
+app.get('/earn/workink/callback', async (req, res) => {
+  const { user_id, offer_id, payout, secret } = req.query;
+  const s = settingsObj();
+
+  // Validate secret matches our API key (Work.ink sends it as a param)
+  if (!s.workink_api_key || secret !== s.workink_api_key) {
+    return res.status(403).send('Invalid secret');
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(user_id);
+  if (!user) return res.status(404).send('User not found');
+
+  // Deduplicate: check if this payout ref was already processed
+  const already = db.prepare("SELECT id FROM coin_log WHERE reason='workink' AND ref=?").get(offer_id+':'+payout);
+  if (already) return res.send('Already processed');
+
+  const amt = parseInt(s.workink_coins||'20', 10);
+  addCoins(user_id, amt, 'workink', `${offer_id}:${payout}`);
+  db.prepare('UPDATE users SET last_workink_claim=? WHERE id=?').run(nowISO(), user_id);
+  res.send('OK');
+});
+
+// Work.ink link redirect
+app.get('/earn/workink', ensureAuth, (req, res) => {
+  const s = settingsObj();
+  if (!s.workink_offer_id) return res.redirect('/earn?error=' + encodeURIComponent('Work.ink not configured.'));
+  res.redirect(`https://work.ink/${s.workink_offer_id}?user_id=${encodeURIComponent(req.user.id)}`);
+});
+
+// Notik link redirect — https://notik.me developer docs
+app.get('/earn/notik', ensureAuth, (req, res) => {
+  const s = settingsObj();
+  if (!s.notik_api_key) return res.redirect('/earn?error=' + encodeURIComponent('Notik not configured.'));
+  const url = s.notik_offer_url
+    ? `${s.notik_offer_url}&user_id=${encodeURIComponent(req.user.id)}`
+    : `https://notik.me/offers?api_key=${s.notik_api_key}&user_id=${encodeURIComponent(req.user.id)}`;
+  res.redirect(url);
+});
+
+// Notik postback — set postback URL in Notik dashboard to:
+// https://yourdomain.com/earn/notik/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret={YOUR_SECRET_KEY}
+app.get('/earn/notik/callback', async (req, res) => {
+  const { user_id, offer_id, payout, secret } = req.query;
+  const s = settingsObj();
+  if (!s.notik_secret_key || secret !== s.notik_secret_key) return res.status(403).send('Invalid secret');
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(user_id);
+  if (!user) return res.status(404).send('User not found');
+  const ref = `notik:${offer_id}:${payout}`;
+  const already = db.prepare("SELECT id FROM coin_log WHERE reason='notik' AND ref=?").get(ref);
+  if (already) return res.send('Already processed');
+  const amt = parseInt(s.notik_coins || '25', 10);
+  addCoins(user_id, amt, 'notik', ref);
+  res.send('OK');
+});
+
+// Paymentwall pingback — set pingback URL in Paymentwall dashboard to:
+// https://yourdomain.com/earn/paymentwall/callback
+// Paymentwall sends: uid, currency, type, ref, sign, sign_version
+app.get('/earn/paymentwall/callback', async (req, res) => {
+  const crypto = require('crypto');
+  const { uid, currency, type, ref, sign, sign_version } = req.query;
+  const s = settingsObj();
+  if (!s.paymentwall_secret_key) return res.status(403).send('Not configured');
+
+  // Verify Paymentwall signature (sign_version=2: md5 of sorted params + secret)
+  const params = Object.entries(req.query)
+    .filter(([k]) => k !== 'sign')
+    .sort(([a],[b]) => a.localeCompare(b))
+    .map(([k,v]) => `${k}=${v}`)
+    .join('&');
+  const expected = crypto.createHash('md5').update(params + s.paymentwall_secret_key).digest('hex');
+  if (sign !== expected) return res.status(403).send('Invalid signature');
+
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(uid);
+  if (!user) return res.status(404).send('User not found');
+
+  const already = db.prepare("SELECT id FROM coin_log WHERE reason='paymentwall' AND ref=?").get(ref);
+  if (already) return res.send('OK'); // idempotent
+
+  const amt = parseInt(s.paymentwall_coins || '30', 10);
+  addCoins(uid, amt, 'paymentwall', ref);
+  res.send('OK');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Account Settings
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/account', ensureAuth, (req, res) => {
+  const servers = getServersByUser.all(req.user.id);
+  const txns    = db.prepare('SELECT * FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT 20').all(req.user.id);
+  const coinLog = db.prepare('SELECT * FROM coin_log WHERE user_id=? ORDER BY id DESC LIMIT 20').all(req.user.id);
+  res.render('account/index', {
+    user: req.user, servers, txns, coinLog, pageTitle: 'Account',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.get('/account/reset-password', ensureAuth, (req, res) => {
+  res.render('account/reset-password', { user: req.user, newPassword: null, error: req.query.error||null, pageTitle: 'Reset Password' });
+});
+
+app.post('/account/reset-password', ensureAuth, async (req, res) => {
+  if (!req.user.pterodactyl_user_id) {
+    return res.render('account/reset-password', { user: req.user, newPassword: null, error: 'Account not linked to panel.' });
+  }
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let pw = Array.from({length:16}, () => chars[Math.floor(Math.random()*chars.length)]).join('') + 'A1!';
+  try {
+    await ptero.api.patch(`/users/${req.user.pterodactyl_user_id}`, {
+      email: req.user.email,
+      username: (req.user.username||'user').replace(/[^a-zA-Z0-9_]/g,'').slice(0,32)||'user',
+      first_name: req.user.username||'User', last_name: 'User', password: pw
+    });
+    res.render('account/reset-password', { user: req.user, newPassword: pw, error: null, pageTitle: 'Reset Password' });
+  } catch (err) {
+    console.error(err.response?.data||err.message);
+    res.render('account/reset-password', { user: req.user, newPassword: null, error: 'Failed to reset password.', pageTitle: 'Reset Password' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkout / Payments
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/checkout/:planKey', ensureAuth, async (req, res) => {
+  const plan = getPlanByKey.get(req.params.planKey);
+  if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
+  if (!req.user.pterodactyl_user_id) return res.redirect('/dashboard?error=Account+not+linked+to+panel.');
+  const gateway = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
+  try {
+    const [rawNests, nodes] = await Promise.all([ptero.listNestsWithEggs(), ptero.listNodes()]);
+    const nests = filterNestsByAllowedEggs(rawNests);
+    res.render('checkout/configure', { user: req.user, plan, gateway, nests, nodes, error: req.query.error||null, pageTitle: 'Checkout' });
+  } catch (err) {
+    res.redirect('/dashboard?error=' + encodeURIComponent('Could not load panel options.'));
+  }
+});
+
+app.post('/checkout/:planKey/pay', ensureAuth, async (req, res) => {
+  const plan    = getPlanByKey.get(req.params.planKey);
+  if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
+  const gateway = req.body.gateway === 'paypal' ? 'paypal' : 'razorpay';
+  const nestId  = parseInt(req.body.nest_id,10);
+  const eggId   = parseInt(req.body.egg_id, 10);
+  const nodeId  = parseInt(req.body.node_id,10);
+  const name    = (req.body.name || `${req.user.username}'s ${plan.name} Server`).slice(0,60);
+  if (!nestId||!eggId||!nodeId) return res.redirect(`/checkout/${plan.key}?gateway=${gateway}&error=Select+software+and+node.`);
+  const deployConfig = JSON.stringify({ nest_id:nestId, egg_id:eggId, node_id:nodeId, name });
+  try {
+    if (gateway === 'razorpay') {
+      const order = await payments.createRazorpayOrder({
+        amountPaise: plan.price_inr,
+        receipt: `plan_${plan.key}_${req.user.id}_${Date.now()}`,
+        notes: { user_id: req.user.id, plan_key: plan.key }
+      });
+      insertTransaction.run({ user_id:req.user.id, plan_key:plan.key, gateway:'razorpay', gateway_order_id:order.id, amount:plan.price_inr/100, currency:'INR', type:'new', deploy_config:deployConfig });
+      return res.render('checkout/razorpay', { user:req.user, plan, order, keyId:process.env.RAZORPAY_KEY_ID, baseUrl:process.env.BASE_URL||'', pageTitle: 'Pay' });
+    }
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const order   = await payments.createPaypalOrder({ amountUsd:plan.price_usd, referenceId:`plan_${plan.key}_${req.user.id}`, returnUrl:`${baseUrl}/checkout/paypal/return`, cancelUrl:`${baseUrl}/checkout/${plan.key}?gateway=paypal` });
+    insertTransaction.run({ user_id:req.user.id, plan_key:plan.key, gateway:'paypal', gateway_order_id:order.id, amount:plan.price_usd, currency:'USD', type:'new', deploy_config:deployConfig });
+    const approveLink = order.links.find(l=>l.rel==='approve')?.href;
+    if (!approveLink) throw new Error('No PayPal approval link.');
+    res.redirect(approveLink);
+  } catch (err) {
+    console.error(err.response?.data||err.message);
+    res.redirect(`/checkout/${plan.key}?gateway=${gateway}&error=Payment+failed.+Try+again.`);
+  }
+});
+
+async function fulfillPaidTransaction(tx) {
+  const plan = db.prepare('SELECT * FROM plans WHERE key=?').get(tx.plan_key);
+  if (!plan) throw new Error('Unknown plan');
+  const cfg  = JSON.parse(tx.deploy_config||'{}');
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(tx.user_id);
+  const s    = settingsObj();
+  const specs = { memory:plan.memory, disk:plan.disk, cpu:plan.cpu, databases:plan.databases, backups:plan.backups };
+  const desc  = `Managed by ${s.dashboard_url||process.env.BASE_URL||'http://localhost:3000'}`;
+  const result = await ptero.createServer({ panelUserId:user.pterodactyl_user_id, name:cfg.name, nestId:cfg.nest_id, eggId:cfg.egg_id, nodeId:cfg.node_id, specs, description:desc });
+  const now = nowISO(), next = nextBillingDate();
+  insertServer.run({
+    user_id:user.id, pterodactyl_server_id:result.attributes.id, pterodactyl_identifier:result.attributes.identifier,
+    name:cfg.name, description:desc, plan:plan.key, egg_id:cfg.egg_id, nest_id:cfg.nest_id, node_id:cfg.node_id,
+    ...specs, ports:1, subscription_active:1, subscription_gateway:tx.gateway, billing_cycle_start:now, billing_cycle_end:next
+  });
+  return db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
+}
+
+app.post('/checkout/razorpay/verify', ensureAuth, async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  if (!payments.verifyRazorpayPaymentSignature({ orderId:razorpay_order_id, paymentId:razorpay_payment_id, signature:razorpay_signature }))
+    return res.status(400).json({ ok:false, error:'Invalid signature.' });
+  const tx = getTransactionByOrderId.get(razorpay_order_id,'razorpay');
+  if (!tx||tx.user_id!==req.user.id) return res.status(404).json({ ok:false, error:'Transaction not found.' });
+  if (tx.status==='paid') return res.json({ ok:true, redirect:'/dashboard?success=Already+processed.' });
+  try {
+    const server = await fulfillPaidTransaction(tx);
+    markTransactionPaid.run(razorpay_payment_id, server.id, tx.id);
+    res.json({ ok:true, redirect:'/dashboard?success=' + encodeURIComponent('Payment successful!') });
+  } catch(err) {
+    console.error(err.response?.data||err.message);
+    res.status(500).json({ ok:false, error:'Server creation failed. Contact support. Order: '+razorpay_order_id });
+  }
+});
+
+app.post('/webhooks/razorpay', async (req, res) => {
+  const sig = req.headers['x-razorpay-signature'];
+  if (!sig || !payments.verifyRazorpayWebhookSignature({ rawBody:req.body, signature:sig })) return res.status(400).send('Invalid');
+  let payload; try { payload=JSON.parse(req.body.toString('utf8')); } catch { return res.status(400).send('Bad JSON'); }
+  if (payload.event==='payment.captured') {
+    const orderId=payload.payload?.payment?.entity?.order_id, paymentId=payload.payload?.payment?.entity?.id;
+    const tx=getTransactionByOrderId.get(orderId,'razorpay');
+    if (tx&&tx.status!=='paid') { try { const s=await fulfillPaidTransaction(tx); markTransactionPaid.run(paymentId,s.id,tx.id); } catch(e){console.error(e.message);} }
+  }
+  res.json({ received:true });
+});
+
+app.get('/checkout/paypal/return', ensureAuth, async (req, res) => {
+  const orderId=req.query.token;
+  if (!orderId) return res.redirect('/dashboard?error=Missing+PayPal+reference.');
+  const tx=getTransactionByOrderId.get(orderId,'paypal');
+  if (!tx||tx.user_id!==req.user.id) return res.redirect('/dashboard?error=Transaction+not+found.');
+  if (tx.status==='paid') return res.redirect('/dashboard?success=Already+processed.');
+  try {
+    const capture=await payments.capturePaypalOrder(orderId);
+    if (capture.status!=='COMPLETED') { markTransactionFailed.run(tx.id); return res.redirect('/dashboard?error=Payment+not+completed.'); }
+    const captureId=capture.purchase_units?.[0]?.payments?.captures?.[0]?.id||orderId;
+    const server=await fulfillPaidTransaction(tx);
+    markTransactionPaid.run(captureId,server.id,tx.id);
+    res.redirect('/dashboard?success=' + encodeURIComponent('Payment successful!'));
+  } catch(err) {
+    console.error(err.response?.data||err.message);
+    res.redirect('/dashboard?error=' + encodeURIComponent('Server creation failed. Contact support: '+orderId));
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/admin', ensureAdmin, (req, res) => {
+  const txns = db.prepare(`SELECT t.*,u.username,u.email FROM transactions t JOIN users u ON t.user_id=u.id ORDER BY t.id DESC LIMIT 50`).all();
+  res.render('admin/index', {
+    user:req.user, settings:settingsObj(),
+    users:getAllUsers.all(), servers:getAllServersAdmin.all(),
+    plans:db.prepare('SELECT * FROM plans').all(),
+    storeItems:getAllStoreItems.all(), transactions:txns, pageTitle: 'Admin',
+    eggs: db.prepare('SELECT * FROM eggs ORDER BY nest_name, egg_name').all(),
+    error:req.query.error||null, success:req.query.success||null
+  });
+});
+
+app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
+  const fields = [
+    'default_memory','default_disk','default_cpu','default_ports','default_databases','default_backups',
+    'daily_coins','workink_coins','workink_api_key','workink_offer_id',
+    'paymentwall_app_key','paymentwall_secret_key','paymentwall_widget','paymentwall_coins',
+    'notik_api_key','notik_secret_key','notik_coins','notik_offer_url',
+    'dashboard_url','app_name','app_favicon_url',
+    'renewal_enabled','renewal_price','renewal_days','renewal_grace_days',
+    'queue_enabled','queue_delay_seconds','queue_max_parallel'
+  ];
+  for (const f of fields) if (req.body[f] !== undefined) setSetting(f, req.body[f]);
+  audit(req.user, 'settings.update', { type:'settings', id:'global', name:'Settings' }, { fields: fields.filter(f => req.body[f] !== undefined) }, req.ip);
+  res.redirect('/admin?success=Settings+updated.#settings');
+});
+
+app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
+  const server=getServerById.get(req.params.id);
+  if (!server) return res.redirect('/admin?error=Not+found.');
+  const specs={ memory:parseInt(req.body.memory,10), disk:parseInt(req.body.disk,10), cpu:parseInt(req.body.cpu,10), databases:parseInt(req.body.databases,10), backups:parseInt(req.body.backups,10) };
+  try {
+    await ptero.updateServerBuild(server.pterodactyl_server_id, specs);
+    db.prepare('UPDATE servers SET memory=?,disk=?,cpu=?,databases=?,backups=? WHERE id=?').run(specs.memory,specs.disk,specs.cpu,specs.databases,specs.backups,server.id);
+    audit(req.user, 'server.update_specs', { type:'server', id:server.id, name:server.name }, { before:{memory:server.memory,disk:server.disk,cpu:server.cpu}, after:specs }, req.ip);
+    res.redirect('/admin?success=Specs+updated.');
+  } catch(err) { res.redirect('/admin?error=Failed+to+update+specs.'); }
+});
+
+app.post('/admin/servers/:id/delete', ensureAdmin, async (req, res) => {
+  const server=getServerById.get(req.params.id);
+  if (!server) return res.redirect('/admin?error=Not+found.');
+  try {
+    await ptero.deleteServer(server.pterodactyl_server_id, true);
+    returnResources(server.user_id, { memory:server.memory, disk:server.disk, cpu:server.cpu, ports:server.ports||1, databases:server.databases||0, backups:server.backups||0 });
+    deleteServerRow.run(server.id);
+    audit(req.user, 'server.delete', { type:'server', id:server.id, name:server.name }, { plan:server.plan, user_id:server.user_id }, req.ip);
+    res.redirect('/admin?success=Server+deleted.');
+  } catch(err) { res.redirect('/admin?error=Failed+to+delete.'); }
+});
+
+app.post('/admin/users/:id/toggle-admin', ensureAdmin, (req, res) => {
+  const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.redirect('/admin?error=Not+found.');
+  db.prepare('UPDATE users SET is_admin=? WHERE id=?').run(u.is_admin?0:1,u.id);
+  audit(req.user, u.is_admin ? 'user.revoke_admin' : 'user.grant_admin', { type:'user', id:u.id, name:u.username }, {}, req.ip);
+  res.redirect('/admin?success=User+updated.');
+});
+
+app.post('/admin/users/:id/gift-coins', ensureAdmin, (req, res) => {
+  const amt=parseInt(req.body.amount,10)||0;
+  const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.redirect('/admin?error=Not+found.');
+  addCoins(req.params.id, amt, 'admin_gift', req.user.id);
+  audit(req.user, 'user.gift_coins', { type:'user', id:u.id, name:u.username }, { amount:amt }, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent(`Gifted ${amt} coins to ${u.username}.`));
+});
+
+app.post('/admin/users/:id/set-resources', ensureAdmin, (req, res) => {
+  const fields=['res_memory','res_disk','res_cpu','res_ports','res_databases','res_backups'];
+  const vals=fields.map(f=>parseInt(req.body[f],10)||0);
+  db.prepare(`UPDATE users SET res_memory=?,res_disk=?,res_cpu=?,res_ports=?,res_databases=?,res_backups=? WHERE id=?`).run(...vals, req.params.id);
+  const uForAudit = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  audit(req.user, 'user.set_resources', { type:'user', id:req.params.id, name:uForAudit?.username }, { memory:vals[0],disk:vals[1],cpu:vals[2],ports:vals[3],databases:vals[4],backups:vals[5] }, req.ip);
+  res.redirect('/admin?success=Resources+updated.');
+});
+
+// ── Admin: Eggs ────────────────────────────────────────────
+
+// Sync eggs from panel into the eggs table
+app.post('/admin/eggs/sync', ensureAdmin, async (req, res) => {
+  try {
+    const nests = await ptero.listNestsWithEggs();
+    const upsert = db.prepare(`
+      INSERT INTO eggs (nest_id, egg_id, nest_name, egg_name, active)
+      VALUES (@nest_id, @egg_id, @nest_name, @egg_name, 1)
+      ON CONFLICT(nest_id, egg_id) DO UPDATE SET nest_name=@nest_name, egg_name=@egg_name
+    `);
+    let count = 0;
+    for (const nest of nests) {
+      for (const egg of nest.eggs) {
+        upsert.run({ nest_id: nest.id, egg_id: egg.id, nest_name: nest.name, egg_name: egg.name });
+        count++;
+      }
+    }
+    audit(req.user, 'eggs.sync', { type:'eggs', id:'all', name:'Egg Sync' }, { count }, req.ip);
+    res.redirect('/admin?success=' + encodeURIComponent(`Synced ${count} eggs from panel.`) + '#eggs');
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.redirect('/admin?error=' + encodeURIComponent('Failed to sync eggs from panel.') + '#eggs');
+  }
+});
+
+// Add a new egg manually
+app.post('/admin/eggs/add', ensureAdmin, (req, res) => {
+  const { nest_id, egg_id, nest_name, egg_name, description } = req.body;
+  if (!nest_id || !egg_id || !egg_name) {
+    return res.redirect('/admin?error=' + encodeURIComponent('Nest ID, Egg ID and name are required.') + '#eggs');
+  }
+  try {
+    db.prepare(`INSERT OR IGNORE INTO eggs (nest_id, egg_id, nest_name, egg_name, description, active)
+      VALUES (?,?,?,?,?,1)`).run(parseInt(nest_id), parseInt(egg_id), nest_name||'', egg_name, description||'');
+    audit(req.user, 'eggs.add', { type:'egg', id:`${nest_id}:${egg_id}`, name:egg_name }, {}, req.ip);
+    res.redirect('/admin?success=' + encodeURIComponent(`Added egg: ${egg_name}`) + '#eggs');
+  } catch {
+    res.redirect('/admin?error=' + encodeURIComponent('Egg already exists.') + '#eggs');
+  }
+});
+
+// Update egg (name, description, active)
+app.post('/admin/eggs/:id', ensureAdmin, (req, res) => {
+  const { egg_name, nest_name, description, active } = req.body;
+  const egg = db.prepare('SELECT * FROM eggs WHERE id=?').get(req.params.id);
+  if (!egg) return res.redirect('/admin?error=Egg+not+found.#eggs');
+  db.prepare('UPDATE eggs SET egg_name=?, nest_name=?, description=?, active=? WHERE id=?')
+    .run(egg_name, nest_name||'', description||'', active ? 1 : 0, req.params.id);
+  audit(req.user, active ? 'eggs.enable' : 'eggs.disable', { type:'egg', id:req.params.id, name:egg_name }, {}, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent(`Updated egg: ${egg_name}`) + '#eggs');
+});
+
+// Delete egg
+app.post('/admin/eggs/:id/delete', ensureAdmin, (req, res) => {
+  const egg = db.prepare('SELECT * FROM eggs WHERE id=?').get(req.params.id);
+  if (!egg) return res.redirect('/admin?error=Egg+not+found.#eggs');
+  db.prepare('DELETE FROM eggs WHERE id=?').run(req.params.id);
+  audit(req.user, 'eggs.delete', { type:'egg', id:req.params.id, name:egg.egg_name }, {}, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent(`Deleted egg: ${egg.egg_name}`) + '#eggs');
+});
+
+app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
+    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
+  audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
+  res.redirect('/admin?success=Plan+updated.');
+});
+
+app.post('/admin/store/:key', ensureAdmin, (req, res) => {
+  const {name,description,resource,amount,cost,active}=req.body;
+  db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`)
+    .run(name,description,resource,parseInt(amount,10),parseInt(cost,10),active?1:0,req.params.key);
+  audit(req.user, 'store.update_item', { type:'store_item', id:req.params.key, name }, {}, req.ip);
+  res.redirect('/admin?success=Store+item+updated.');
+});
+
+app.post('/admin/store/new', ensureAdmin, (req, res) => {
+  const {key,name,description,resource,amount,cost}=req.body;
+  if (!key||!name||!resource) return res.redirect('/admin?error=Missing+fields.');
+  try {
+    db.prepare(`INSERT INTO store_items(key,name,description,resource,amount,cost,active) VALUES(?,?,?,?,?,?,1)`)
+      .run(key,name,description||'',resource,parseInt(amount,10)||0,parseInt(cost,10)||0);
+    audit(req.user, 'store.create_item', { type:'store_item', id:key, name }, { resource, amount, cost }, req.ip);
+    res.redirect('/admin?success=Store+item+created.');
+  } catch { res.redirect('/admin?error=Key+already+exists.'); }
+});
+
+// Queue status for the current user (called via JS polling on dashboard)
+app.get('/api/queue', ensureAuth, (req, res) => {
+  const jobs  = getUserQueueStatus(req.user.id);
+  const info  = getQueueInfo();
+  const jobsWithPos = jobs.map(j => ({
+    ...j,
+    position: j.status === 'pending' ? getPositionForJob(j.id) : null,
+  }));
+  res.json({ jobs: jobsWithPos, info });
+});
+
+// Admin: audit log with filtering
+app.get('/admin/audit', ensureAdmin, (req, res) => {
+  const { action, admin, from, to, page: rawPage } = req.query;
+  const page    = Math.max(1, parseInt(rawPage || '1', 10));
+  const perPage = 50;
+  const offset  = (page - 1) * perPage;
+
+  let where = '1=1';
+  const params = [];
+  if (action) { where += ' AND action LIKE ?';      params.push(`%${action}%`); }
+  if (admin)  { where += ' AND admin_name LIKE ?';  params.push(`%${admin}%`); }
+  if (from)   { where += ' AND created_at >= ?';    params.push(from); }
+  if (to)     { where += ' AND created_at <= ?';    params.push(to + ' 23:59:59'); }
+
+  const total = db.prepare(`SELECT COUNT(*) as n FROM audit_log WHERE ${where}`).get(...params).n;
+  const logs  = db.prepare(`SELECT * FROM audit_log WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+                  .all(...params, perPage, offset);
+
+  const actions = db.prepare('SELECT DISTINCT action FROM audit_log ORDER BY action').all().map(r => r.action);
+
+  res.render('admin/audit', {
+    user: req.user, logs, actions,
+    filters: { action: action||'', admin: admin||'', from: from||'', to: to||'' },
+    pagination: { page, perPage, total, pages: Math.ceil(total / perPage) },
+    pageTitle: 'Audit Log',
+    error: req.query.error || null
+  });
+});
+
+// Admin: trigger update check manually
+app.post('/admin/update', ensureAdmin, async (req, res) => {
+  res.redirect('/admin?success=Update+check+triggered.+Check+server+logs.');
+  setTimeout(() => checkForUpdate(), 500);
+});
+
+// Suspend expired subscriptions (call from cron)
+app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
+  const expired = db.prepare(`SELECT * FROM servers WHERE plan!='free' AND subscription_active=2 AND billing_cycle_end<=datetime('now')`).all();
+  for (const s of expired) {
+    try { await ptero.api.post(`/servers/${s.pterodactyl_server_id}/suspend`); db.prepare('UPDATE servers SET subscription_active=0 WHERE id=?').run(s.id); } catch {}
+  }
+  res.json({ suspended: expired.length });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Start
+// ─────────────────────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  console.log(`FusionDash running on port ${PORT}`);
+  await firstRunSetup();
+  startAutoUpdater();
+  startQueue();
+  console.log('[queue] Server creation queue started');
+});
