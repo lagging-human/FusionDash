@@ -167,12 +167,24 @@ CREATE TABLE IF NOT EXISTS allowed_eggs (
   created_at  TEXT DEFAULT (datetime('now')),
   UNIQUE(nest_id, egg_id)
 );
+
+-- Node overrides — admins can control state and capacity per node
+CREATE TABLE IF NOT EXISTS nodes (
+  panel_node_id   INTEGER PRIMARY KEY,  -- matches Pterodactyl node ID
+  name            TEXT,
+  fqdn            TEXT,
+  state           TEXT DEFAULT 'active', -- 'active' | 'full' | 'down' | 'premium'
+  max_servers     INTEGER DEFAULT 0,     -- 0 = unlimited
+  server_count    INTEGER DEFAULT 0,     -- tracked locally; synced on admin view
+  updated_at      TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Safe migrations for existing databases
 // ─────────────────────────────────────────────────────────────────────────────
 const migrations = [
+  `CREATE TABLE IF NOT EXISTS nodes (panel_node_id INTEGER PRIMARY KEY, name TEXT, fqdn TEXT, state TEXT DEFAULT 'active', max_servers INTEGER DEFAULT 0, server_count INTEGER DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')))`,
   `ALTER TABLE servers ADD COLUMN subscription_active INTEGER DEFAULT 0`,
   `ALTER TABLE servers ADD COLUMN subscription_gateway TEXT`,
   `ALTER TABLE servers ADD COLUMN billing_cycle_start TEXT`,
