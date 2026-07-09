@@ -8,7 +8,7 @@ const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
 const { icon } = require('./icons');
 const { getLiveStats, getOrCreateInstallId } = require('./telemetry');
-const { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob } = require('./queue');
+const { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob, createServerImmediate } = require('./queue');
 const { audit } = require('./audit');
 const { firstRunSetup } = require('./first-run');
 
@@ -194,6 +194,7 @@ app.post('/logout', (req, res, next) => req.logout(err => err ? next(err) : res.
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/dashboard', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
+  const plans   = getAllPlans.all();
   const free    = freeResources(req.user);
   const s       = settingsObj();
   const renewal = {
@@ -203,22 +204,8 @@ app.get('/dashboard', ensureAuth, (req, res) => {
     graceDays:  parseInt(s.renewal_grace_days || '1', 10),
   };
   res.render('dashboard', {
-    user: req.user, servers, free, renewal, pageTitle: 'Dashboard',
+    user: req.user, servers, plans, free, renewal, pageTitle: 'Dashboard',
     error: req.query.error||null, success: req.query.success||null
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Billing  /billing
-// ─────────────────────────────────────────────────────────────────────────────
-
-app.get('/billing', ensureAuth, (req, res) => {
-  const servers = getServersByUser.all(req.user.id);
-  const plans   = getAllPlans.all();
-  const s       = settingsObj();
-  res.render('billing', {
-    user: req.user, servers, plans, pageTitle: 'Billing',
-    error: req.query.error || null, success: req.query.success || null
   });
 });
 
@@ -295,6 +282,28 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
     return res.redirect('/servers/create?error=' + encodeURIComponent(errors.join('. ')));
   }
 
+  // ── Node state enforcement ────────────────────────────────────────────────
+  const nodeRow = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(nodeId);
+  if (nodeRow) {
+    if (nodeRow.state === 'down') {
+      return res.redirect('/servers/create?error=' + encodeURIComponent('That node is currently down. Please select a different node.'));
+    }
+    if (nodeRow.state === 'full') {
+      return res.redirect('/servers/create?error=' + encodeURIComponent('That node is full. Please select a different node.'));
+    }
+    if (nodeRow.state === 'premium') {
+      // Only paid-plan users (servers with subscription_active) — check if they have any paid server
+      const hasPaid = db.prepare(`SELECT 1 FROM servers WHERE user_id=? AND plan!='free' AND subscription_active=1 LIMIT 1`).get(req.user.id);
+      if (!hasPaid) {
+        return res.redirect('/servers/create?error=' + encodeURIComponent('That node is for Premium subscribers only. Upgrade at /billing.'));
+      }
+    }
+    // Capacity check
+    if (nodeRow.max_servers > 0 && nodeRow.server_count >= nodeRow.max_servers) {
+      return res.redirect('/servers/create?error=' + encodeURIComponent('That node is full. Please select a different node.'));
+    }
+  }
+
   const s   = settingsObj();
   const dashUrl = s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000';
   const description = `Managed by ${dashUrl}`;
@@ -306,17 +315,28 @@ app.post('/servers/create', ensureAuth, async (req, res) => {
     renewalDue = d.toISOString();
   }
 
-  // Consume resources immediately (reserved while queued)
+  // Consume resources immediately (reserved while queued or deploying)
   consumeResources(req.user.id, { memory, disk, cpu, ports, databases, backups });
 
-  const jobId = enqueue(req.user.id, {
+  const payload = {
     name, description, nestId, eggId, nodeId,
     plan: 'free',
     specs: { memory, disk, cpu, ports, databases, backups },
     subscription_active: 0, subscription_gateway: null,
     billing_cycle_start: null, billing_cycle_end: null,
-  });
+  };
 
+  // ── Premium node → skip queue, create immediately ─────────────────────────
+  if (nodeRow && nodeRow.state === 'premium') {
+    const result = await createServerImmediate(req.user.id, payload);
+    if (result.ok) {
+      return res.redirect('/dashboard?success=' + encodeURIComponent('Server created instantly!'));
+    } else {
+      return res.redirect('/servers/create?error=' + encodeURIComponent('Server creation failed: ' + result.error));
+    }
+  }
+
+  const jobId = enqueue(req.user.id, payload);
   res.redirect('/dashboard?success=' + encodeURIComponent('Server queued! It will be ready in a moment. Job #' + jobId));
 });
 
@@ -807,6 +827,7 @@ app.get('/admin', ensureAdmin, (req, res) => {
     plans:db.prepare('SELECT * FROM plans').all(),
     storeItems:getAllStoreItems.all(), transactions:txns, pageTitle: 'Admin',
     eggs: db.prepare('SELECT * FROM eggs ORDER BY nest_name, egg_name').all(),
+    nodes: db.prepare('SELECT * FROM nodes ORDER BY panel_node_id').all(),
     error:req.query.error||null, success:req.query.success||null
   });
 });
@@ -938,6 +959,31 @@ app.post('/admin/eggs/:id/delete', ensureAdmin, (req, res) => {
   res.redirect('/admin?success=' + encodeURIComponent(`Deleted egg: ${egg.egg_name}`) + '#eggs');
 });
 
+// ── Admin: Plans ────────────────────────────────────────────────────────────
+
+app.post('/admin/plans/create', ensureAdmin, (req, res) => {
+  const {key,name,price_inr,price_usd,memory,disk,cpu,databases,backups}=req.body;
+  if (!key||!name) return res.redirect('/admin/plans?error=Key+and+name+are+required.');
+  try {
+    db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,active)
+      VALUES (?,?,?,?,?,?,?,?,?,1)`)
+      .run(key, name, parseInt(price_inr,10)||0, parseFloat(price_usd)||0,
+          parseInt(memory,10)||0, parseInt(disk,10)||0, parseInt(cpu,10)||0,
+          parseInt(databases,10)||1, parseInt(backups,10)||1);
+    audit(req.user, 'plan.create', { type:'plan', id:key, name }, {}, req.ip);
+    res.redirect('/admin/plans?success=' + encodeURIComponent(`Plan "${name}" created.`));
+  } catch { res.redirect('/admin/plans?error=Plan+key+already+exists.'); }
+});
+
+app.post('/admin/plans/:key/update', ensureAdmin, (req, res) => {
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
+    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
+  audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
+  res.redirect('/admin/plans?success=Plan+updated.');
+});
+
+// Legacy route kept for backwards compat
 app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
   db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
@@ -946,6 +992,57 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   res.redirect('/admin?success=Plan+updated.');
 });
 
+app.post('/admin/plans/:key/delete', ensureAdmin, (req, res) => {
+  const plan = db.prepare('SELECT * FROM plans WHERE key=?').get(req.params.key);
+  if (!plan) return res.redirect('/admin/plans?error=Plan+not+found.');
+  const inUse = db.prepare(`SELECT COUNT(*) as n FROM servers WHERE plan=? AND subscription_active=1`).get(req.params.key).n;
+  if (inUse > 0) return res.redirect('/admin/plans?error=' + encodeURIComponent(`Cannot delete: ${inUse} active subscription(s) use this plan.`));
+  db.prepare('DELETE FROM plans WHERE key=?').run(req.params.key);
+  audit(req.user, 'plan.delete', { type:'plan', id:req.params.key, name:plan.name }, {}, req.ip);
+  res.redirect('/admin/plans?success=' + encodeURIComponent(`Plan "${plan.name}" deleted.`));
+});
+
+// Dedicated /admin/plans page
+app.get('/admin/plans', ensureAdmin, (req, res) => {
+  res.render('admin/plans', {
+    user: req.user,
+    plans: db.prepare('SELECT * FROM plans').all(),
+    pageTitle: 'Admin — Plans',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// ── Admin: Store ────────────────────────────────────────────────────────────
+
+app.get('/admin/store', ensureAdmin, (req, res) => {
+  res.render('admin/store', {
+    user: req.user,
+    storeItems: getAllStoreItems.all(),
+    pageTitle: 'Admin — Store',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.post('/admin/store/new', ensureAdmin, (req, res) => {
+  const {key,name,description,resource,amount,cost}=req.body;
+  if (!key||!name||!resource) return res.redirect('/admin/store?error=Missing+fields.');
+  try {
+    db.prepare(`INSERT INTO store_items(key,name,description,resource,amount,cost,active) VALUES(?,?,?,?,?,?,1)`)
+      .run(key,name,description||'',resource,parseInt(amount,10)||0,parseInt(cost,10)||0);
+    audit(req.user, 'store.create_item', { type:'store_item', id:key, name }, { resource, amount, cost }, req.ip);
+    res.redirect('/admin/store?success=Store+item+created.');
+  } catch { res.redirect('/admin/store?error=Key+already+exists.'); }
+});
+
+app.post('/admin/store/:key/update', ensureAdmin, (req, res) => {
+  const {name,description,resource,amount,cost,active}=req.body;
+  db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`)
+    .run(name,description,resource,parseInt(amount,10),parseInt(cost,10),active?1:0,req.params.key);
+  audit(req.user, 'store.update_item', { type:'store_item', id:req.params.key, name }, {}, req.ip);
+  res.redirect('/admin/store?success=Store+item+updated.');
+});
+
+// Legacy compat
 app.post('/admin/store/:key', ensureAdmin, (req, res) => {
   const {name,description,resource,amount,cost,active}=req.body;
   db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`)
@@ -954,15 +1051,53 @@ app.post('/admin/store/:key', ensureAdmin, (req, res) => {
   res.redirect('/admin?success=Store+item+updated.');
 });
 
-app.post('/admin/store/new', ensureAdmin, (req, res) => {
-  const {key,name,description,resource,amount,cost}=req.body;
-  if (!key||!name||!resource) return res.redirect('/admin?error=Missing+fields.');
-  try {
-    db.prepare(`INSERT INTO store_items(key,name,description,resource,amount,cost,active) VALUES(?,?,?,?,?,?,1)`)
-      .run(key,name,description||'',resource,parseInt(amount,10)||0,parseInt(cost,10)||0);
-    audit(req.user, 'store.create_item', { type:'store_item', id:key, name }, { resource, amount, cost }, req.ip);
-    res.redirect('/admin?success=Store+item+created.');
-  } catch { res.redirect('/admin?error=Key+already+exists.'); }
+app.post('/admin/store/:key/delete', ensureAdmin, (req, res) => {
+  const item = db.prepare('SELECT * FROM store_items WHERE key=?').get(req.params.key);
+  if (!item) return res.redirect('/admin/store?error=Item+not+found.');
+  db.prepare('DELETE FROM store_items WHERE key=?').run(req.params.key);
+  audit(req.user, 'store.delete_item', { type:'store_item', id:req.params.key, name:item.name }, {}, req.ip);
+  res.redirect('/admin/store?success=' + encodeURIComponent(`"${item.name}" deleted.`));
+});
+
+// ── Admin: Nodes ─────────────────────────────────────────────────────────────
+
+app.get('/admin/nodes', ensureAdmin, async (req, res) => {
+  // Sync panel node list then merge with local overrides
+  let panelNodes = [];
+  try { panelNodes = await ptero.listNodes(); } catch {}
+
+  // Upsert all panel nodes into local table (preserves state/max_servers)
+  const upsertNode = db.prepare(`
+    INSERT INTO nodes (panel_node_id, name, fqdn, server_count)
+    VALUES (@id, @name, @fqdn, @count)
+    ON CONFLICT(panel_node_id) DO UPDATE SET name=@name, fqdn=@fqdn, server_count=@count, updated_at=datetime('now')
+  `);
+  for (const pn of panelNodes) {
+    const count = db.prepare('SELECT COUNT(*) as n FROM servers WHERE node_id=?').get(pn.id)?.n || 0;
+    upsertNode.run({ id: pn.id, name: pn.name, fqdn: pn.fqdn, count });
+  }
+
+  const nodes = db.prepare('SELECT * FROM nodes ORDER BY panel_node_id').all();
+  res.render('admin/nodes', {
+    user: req.user, nodes, pageTitle: 'Admin — Nodes',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.post('/admin/nodes/:id/update', ensureAdmin, (req, res) => {
+  const nodeId = parseInt(req.params.id, 10);
+  const state      = req.body.state;
+  const maxServers = parseInt(req.body.max_servers, 10) || 0;
+  const validStates = ['active', 'full', 'down', 'premium'];
+  if (!validStates.includes(state)) return res.redirect('/admin/nodes?error=Invalid+state.');
+
+  const node = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(nodeId);
+  if (!node) return res.redirect('/admin/nodes?error=Node+not+found.');
+
+  db.prepare(`UPDATE nodes SET state=?, max_servers=?, updated_at=datetime('now') WHERE panel_node_id=?`)
+    .run(state, maxServers, nodeId);
+  audit(req.user, 'node.update', { type:'node', id:String(nodeId), name:node.name }, { state, max_servers:maxServers }, req.ip);
+  res.redirect('/admin/nodes?success=' + encodeURIComponent(`Node "${node.name}" updated.`));
 });
 
 // Queue status for the current user (called via JS polling on dashboard)
