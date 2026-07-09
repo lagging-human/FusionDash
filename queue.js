@@ -14,6 +14,39 @@ const markProcessing = db.prepare(`UPDATE server_queue SET status='processing', 
 const markDone       = db.prepare(`UPDATE server_queue SET status='done', server_id=?, finished_at=datetime('now') WHERE id=?`);
 const markFailed     = db.prepare(`UPDATE server_queue SET status='failed', error=?, finished_at=datetime('now') WHERE id=?`);
 const getUser        = db.prepare('SELECT * FROM users WHERE id=?');
+
+// ── Resource return helper (called on queue failure) ────────────────────────
+function returnResourcesForPayload(userId, payload) {
+  if (!payload || !payload.specs) return;
+  try {
+    db.prepare(`
+      UPDATE users SET
+        res_memory    = res_memory    + @memory,
+        res_disk      = res_disk      + @disk,
+        res_cpu       = res_cpu       + @cpu,
+        res_ports     = res_ports     + @ports,
+        res_databases = res_databases + @databases,
+        res_backups   = res_backups   + @backups,
+        used_memory   = MAX(0, used_memory   - @memory),
+        used_disk     = MAX(0, used_disk     - @disk),
+        used_cpu      = MAX(0, used_cpu      - @cpu),
+        used_ports    = MAX(0, used_ports    - @ports),
+        used_databases= MAX(0, used_databases- @databases),
+        used_backups  = MAX(0, used_backups  - @backups)
+      WHERE id = @userId
+    `).run({
+      userId,
+      memory:    payload.specs.memory    || 0,
+      disk:      payload.specs.disk      || 0,
+      cpu:       payload.specs.cpu       || 0,
+      ports:     payload.specs.ports     || 1,
+      databases: payload.specs.databases || 0,
+      backups:   payload.specs.backups   || 0,
+    });
+  } catch (e) {
+    console.error('[queue] resource return failed:', e.message);
+  }
+}
 const insertServer   = db.prepare(`
   INSERT INTO servers
     (user_id,pterodactyl_server_id,pterodactyl_identifier,name,description,plan,
@@ -96,13 +129,27 @@ async function processJob(job) {
       renewal_suspended:     0,
     });
 
+    // Increment node server_count and auto-set FULL if max_servers reached
+    if (payload.nodeId) {
+      const nodeRow = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(payload.nodeId);
+      if (nodeRow) {
+        const newCount = (nodeRow.server_count || 0) + 1;
+        const newState = (nodeRow.max_servers > 0 && newCount >= nodeRow.max_servers && nodeRow.state === 'active')
+          ? 'full' : nodeRow.state;
+        db.prepare(`UPDATE nodes SET server_count=?, state=?, updated_at=datetime('now') WHERE panel_node_id=?`)
+          .run(newCount, newState, payload.nodeId);
+      }
+    }
+
     const server = db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
     markDone.run(server.id, job.id);
     lastJobFinished = Date.now();
   } catch (err) {
     const msg = err.response?.data?.errors?.[0]?.detail || err.message || 'Unknown error';
     markFailed.run(msg, job.id);
-    lastJobFinished = Date.now(); // still update so next job doesn't skip the delay
+    // ── Return resources to user on failure ──────────────────────────────
+    returnResourcesForPayload(job.user_id, payload);
+    lastJobFinished = Date.now();
   }
 }
 
@@ -185,4 +232,74 @@ function getPositionForJob(jobId) {
   return db.prepare(`SELECT COUNT(*) as n FROM server_queue WHERE status='pending' AND id<?`).get(jobId).n + 1;
 }
 
-module.exports = { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob };
+/**
+ * Create a server immediately (bypasses queue — used for premium plans).
+ * Returns { ok: true, serverId } or { ok: false, error }.
+ */
+async function createServerImmediate(userId, payload) {
+  const user = getUser.get(userId);
+  if (!user?.pterodactyl_user_id) return { ok: false, error: 'User not linked to panel.' };
+  try {
+    const result = await ptero.createServer({
+      panelUserId: user.pterodactyl_user_id,
+      name:        payload.name,
+      nestId:      payload.nestId,
+      eggId:       payload.eggId,
+      nodeId:      payload.nodeId,
+      specs:       payload.specs,
+      description: payload.description,
+    });
+
+    const s = getSettings();
+    let renewalDue = null;
+    if (s.renewalEnabled) {
+      const d = new Date();
+      d.setDate(d.getDate() + s.renewalDays);
+      renewalDue = d.toISOString();
+    }
+
+    insertServer.run({
+      user_id:               user.id,
+      pterodactyl_server_id: result.attributes.id,
+      pterodactyl_identifier:result.attributes.identifier,
+      name:                  payload.name,
+      description:           payload.description,
+      plan:                  payload.plan || 'free',
+      egg_id:                payload.eggId,
+      nest_id:               payload.nestId,
+      node_id:               payload.nodeId,
+      memory:                payload.specs.memory,
+      disk:                  payload.specs.disk,
+      cpu:                   payload.specs.cpu,
+      ports:                 payload.specs.ports     || 1,
+      databases:             payload.specs.databases || 0,
+      backups:               payload.specs.backups   || 0,
+      subscription_active:   payload.subscription_active   || 0,
+      subscription_gateway:  payload.subscription_gateway  || null,
+      billing_cycle_start:   payload.billing_cycle_start   || null,
+      billing_cycle_end:     payload.billing_cycle_end     || null,
+      renewal_due:           renewalDue,
+      renewal_suspended:     0,
+    });
+
+    if (payload.nodeId) {
+      const nodeRow = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(payload.nodeId);
+      if (nodeRow) {
+        const newCount = (nodeRow.server_count || 0) + 1;
+        const newState = (nodeRow.max_servers > 0 && newCount >= nodeRow.max_servers && nodeRow.state === 'premium')
+          ? 'full' : nodeRow.state;
+        db.prepare(`UPDATE nodes SET server_count=?, state=?, updated_at=datetime('now') WHERE panel_node_id=?`)
+          .run(newCount, newState, payload.nodeId);
+      }
+    }
+
+    const server = db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
+    return { ok: true, serverId: server.id };
+  } catch (err) {
+    returnResourcesForPayload(userId, payload);
+    const msg = err.response?.data?.errors?.[0]?.detail || err.message || 'Unknown error';
+    return { ok: false, error: msg };
+  }
+}
+
+module.exports = { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob, createServerImmediate, returnResourcesForPayload };
