@@ -23,13 +23,19 @@
   <!-- Page header -->
   <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
     <div>
-      <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-medium"><%= user.username %></span> / Servers</p>
-      <p class="text-xs text-zinc-600 mt-0.5">Manage your game servers and resource pool.</p>
+      <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-medium"><%= user.username %></span> / Dashboard</p>
+      <p class="text-xs text-zinc-600 mt-0.5">Your free servers and resource pool.</p>
     </div>
-    <a href="/servers/create" class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-500/15 px-4 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
-      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-      New Server
-    </a>
+    <div class="flex items-center gap-x-2">
+      <a href="/billing" class="inline-flex items-center gap-x-1.5 rounded-full bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-400 ring-1 ring-inset ring-emerald-500/25 hover:bg-emerald-500/20 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 21Z"/></svg>
+        Billing
+      </a>
+      <a href="/servers/create" class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-500/15 px-4 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        New Server
+      </a>
+    </div>
   </div>
 
   <!-- Resource Pool -->
@@ -72,17 +78,23 @@
     </div>
   </div>
 
-  <!-- Servers -->
-  <div class="px-4 pt-5 sm:px-6 lg:px-8">
+  <!-- Free Servers -->
+  <div class="px-4 pt-5 pb-10 sm:px-6 lg:px-8">
+    <% const freeServers = servers.filter(s => s.plan === 'free'); %>
     <div class="flex items-center justify-between mb-3">
-      <p class="text-sm font-semibold text-white">Your servers</p>
-      <p class="text-xs text-zinc-600"><%= servers.length %> total</p>
+      <p class="text-sm font-semibold text-white">Free Servers</p>
+      <div class="flex items-center gap-x-3">
+        <% if (servers.filter(s => s.plan !== 'free').length > 0) { %>
+        <a href="/billing" class="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium">View paid servers →</a>
+        <% } %>
+        <p class="text-xs text-zinc-600"><%= freeServers.length %> total</p>
+      </div>
     </div>
 
-    <% if (servers.length === 0) { %>
+    <% if (freeServers.length === 0) { %>
     <div class="rounded-2xl border border-dashed border-white/10 py-14 text-center">
       <svg class="mx-auto h-10 w-10 text-zinc-700 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
-      <p class="text-sm text-zinc-500">No servers yet</p>
+      <p class="text-sm text-zinc-500">No free servers yet</p>
       <a href="/servers/create" class="mt-4 inline-block rounded-full bg-blue-500/15 px-5 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">Create your first server</a>
     </div>
     <% } else { %>
@@ -93,17 +105,13 @@
         <thead class="bg-white/[0.02] border-b border-white/[0.06]">
           <tr>
             <th class="py-3 pl-4 pr-6 text-xs font-semibold text-zinc-500">Name</th>
-            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Plan</th>
             <th class="py-3 pr-6 text-xs font-semibold text-zinc-500 hidden lg:table-cell">Resources</th>
             <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Status</th>
             <th class="py-3 pr-4 text-xs font-semibold text-zinc-500 text-right">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-white/[0.04]">
-          <% servers.forEach(server => {
-            const cycleEnd = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
-            const daysLeft = cycleEnd ? Math.max(0, Math.ceil((cycleEnd - Date.now()) / 86400000)) : null;
-            const subStatus = server.subscription_active === 1 ? 'active' : server.subscription_active === 2 ? 'cancelled' : null;
+          <% freeServers.forEach(server => {
             const ago = (() => { const d = Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
             const renewalDue = server.renewal_due ? new Date(server.renewal_due) : null;
             const renewalDaysLeft = renewalDue ? Math.ceil((renewalDue - Date.now()) / 86400000) : null;
@@ -113,8 +121,8 @@
           <tr class="hover:bg-white/[0.015] transition-colors">
             <td class="py-3.5 pl-4 pr-6">
               <div class="flex items-center gap-x-3">
-                <div class="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <svg class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
+                <div class="h-8 w-8 rounded-lg bg-zinc-500/10 flex items-center justify-center shrink-0">
+                  <svg class="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
                 </div>
                 <div class="min-w-0">
                   <% if (server.pterodactyl_identifier && process.env.PTERODACTYL_PANEL_URL) { %>
@@ -125,19 +133,6 @@
                   <% } %>
                   <p class="text-xs text-zinc-600"><%= ago %></p>
                 </div>
-              </div>
-            </td>
-            <td class="py-3.5 pr-6">
-              <div class="flex flex-col gap-y-0.5">
-                <span class="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium
-                  <%= server.plan === 'free' ? 'bg-zinc-500/15 text-zinc-400 ring-1 ring-zinc-500/30' : 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30' %>">
-                  <%= server.plan.charAt(0).toUpperCase() + server.plan.slice(1) %>
-                </span>
-                <% if (subStatus === 'active' && daysLeft !== null) { %>
-                <span class="text-[10px] text-zinc-600">Renews in <%= daysLeft %>d</span>
-                <% } else if (subStatus === 'cancelled' && daysLeft !== null) { %>
-                <span class="text-[10px] text-amber-500/70">Cancels in <%= daysLeft %>d</span>
-                <% } %>
               </div>
             </td>
             <td class="py-3.5 pr-6 hidden lg:table-cell">
@@ -168,9 +163,7 @@
                   <% } else if (renewalOverdue) { %>
                     <span class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400">Overdue</span>
                     <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
-                      <button type="submit" class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/15 transition-colors">
-                        Renew now
-                      </button>
+                      <button type="submit" class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/15 transition-colors">Renew now</button>
                     </form>
                   <% } else if (renewalSoon) { %>
                     <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
@@ -194,7 +187,7 @@
 
     <!-- Mobile cards -->
     <div class="sm:hidden space-y-3">
-      <% servers.forEach(server => {
+      <% freeServers.forEach(server => {
         const ago = (() => { const d=Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
       %>
       <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
@@ -208,10 +201,7 @@
             <% } %>
             <p class="text-xs text-zinc-600 mt-0.5"><%= ago %></p>
           </div>
-          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-            <%= server.plan === 'free' ? 'bg-zinc-500/15 text-zinc-400' : 'bg-blue-500/15 text-blue-400' %>">
-            <%= server.plan %>
-          </span>
+          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-zinc-500/15 text-zinc-400">Free</span>
         </div>
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 mb-3">
           <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
@@ -228,40 +218,9 @@
     <% } %>
   </div>
 
-  <!-- Plans -->
-  <div id="plans" class="px-4 pt-8 pb-16 sm:px-6 lg:px-8">
-    <div class="mb-5">
-      <p class="text-sm font-semibold text-white">Upgrade Plans</p>
-      <p class="text-xs text-zinc-500 mt-0.5">Dedicated server with guaranteed resources, billed monthly.</p>
-    </div>
-    <div class="card-grid">
-      <% plans.forEach(plan => { %>
-      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-blue-500/20 transition-colors">
-        <p class="text-sm font-semibold text-white mb-3"><%= plan.name %></p>
-        <ul class="space-y-1.5 text-xs text-zinc-400 mb-5">
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
-        </ul>
-        <div class="flex items-end justify-between">
-          <div>
-            <p class="text-xl font-bold text-white">₹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
-            <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
-          </div>
-          <div class="flex flex-col gap-y-1.5">
-            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors text-center">UPI / Razorpay</a>
-            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-white/[0.08] transition-colors text-center">PayPal</a>
-          </div>
-        </div>
-      </div>
-      <% }) %>
-    </div>
-  </div>
-
 </div><!-- /.app-main -->
 
-  <!-- Queue status widget (auto-hides when no active jobs) -->
+  <!-- Queue status widget -->
   <div id="queueWidget" class="hidden fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-blue-500/20 bg-[#0c0d0f] shadow-2xl overflow-hidden">
     <div class="flex items-center gap-x-2 px-4 py-3 border-b border-white/[0.06] bg-blue-500/5">
       <div id="queueSpinner" class="h-3 w-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin"></div>
@@ -300,7 +259,6 @@ async function pollQueue() {
     if (!data.jobs.length) { widget.classList.add('hidden'); return; }
     widget.classList.remove('hidden');
 
-    // Header summary
     if (header && data.info) {
       const { pending, active: act, etaSeconds } = data.info;
       header.textContent = act > 0
