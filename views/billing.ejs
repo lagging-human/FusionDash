@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<%- include('./components/header') %>
+<body>
+<%- include('./components/sidebar', { activePage:'billing' }) %>
+
+<div class="app-main">
+
+  <!-- Alerts -->
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <!-- Page header -->
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-medium"><%= user.username %></span> / Billing</p>
+      <p class="text-xs text-zinc-600 mt-0.5">Paid servers, plans, and subscriptions.</p>
+    </div>
+    <div class="flex items-center gap-x-1.5 rounded-full bg-yellow-400/10 px-3 py-2 ring-1 ring-inset ring-yellow-400/20">
+      <%- icon('coin', 'h-4 w-4 text-yellow-400') %>
+      <span class="text-xs font-semibold text-yellow-400"><%= user.coins %> coins</span>
+    </div>
+  </div>
+
+  <!-- Paid Servers -->
+  <div class="px-4 pt-5 sm:px-6 lg:px-8">
+    <% const paidServers = servers.filter(s => s.plan !== 'free'); %>
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm font-semibold text-white">Paid Servers</p>
+      <p class="text-xs text-zinc-600"><%= paidServers.length %> total</p>
+    </div>
+
+    <% if (paidServers.length === 0) { %>
+    <div class="rounded-2xl border border-dashed border-white/10 py-10 text-center mb-10">
+      <svg class="mx-auto h-10 w-10 text-zinc-700 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 21Z"/></svg>
+      <p class="text-sm text-zinc-500">No paid servers yet</p>
+      <p class="text-xs text-zinc-600 mt-1">Purchase a plan below to get started.</p>
+    </div>
+    <% } else { %>
+
+    <!-- Desktop table -->
+    <div class="hidden sm:block table-wrap rounded-2xl border border-white/[0.06] overflow-hidden mb-10">
+      <table class="w-full text-left">
+        <thead class="bg-white/[0.02] border-b border-white/[0.06]">
+          <tr>
+            <th class="py-3 pl-4 pr-6 text-xs font-semibold text-zinc-500">Name</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Plan</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500 hidden lg:table-cell">Resources</th>
+            <th class="py-3 pr-6 text-xs font-semibold text-zinc-500">Subscription</th>
+            <th class="py-3 pr-4 text-xs font-semibold text-zinc-500 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/[0.04]">
+          <% paidServers.forEach(server => {
+            const cycleEnd = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
+            const daysLeft = cycleEnd ? Math.max(0, Math.ceil((cycleEnd - Date.now()) / 86400000)) : null;
+            const subStatus = server.subscription_active === 1 ? 'active' : server.subscription_active === 2 ? 'cancelled' : null;
+            const ago = (() => { const d = Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
+          %>
+          <tr class="hover:bg-white/[0.015] transition-colors">
+            <td class="py-3.5 pl-4 pr-6">
+              <div class="flex items-center gap-x-3">
+                <div class="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <svg class="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 0 0 3 3h7.5a3 3 0 0 0 3-3m-13.5 0V8.25m0 0a3 3 0 0 1 3-3h7.5a3 3 0 0 1 3 3m0 0v6m0-6h-13.5"/></svg>
+                </div>
+                <div class="min-w-0">
+                  <% if (server.pterodactyl_identifier && process.env.PTERODACTYL_PANEL_URL) { %>
+                  <a href="<%= process.env.PTERODACTYL_PANEL_URL %>/server/<%= server.pterodactyl_identifier %>" target="_blank"
+                    class="text-sm font-medium text-white hover:text-blue-400 transition-colors truncate block max-w-[160px]"><%= server.name %></a>
+                  <% } else { %>
+                  <span class="text-sm font-medium text-white truncate block max-w-[160px]"><%= server.name %></span>
+                  <% } %>
+                  <p class="text-xs text-zinc-600"><%= ago %></p>
+                </div>
+              </div>
+            </td>
+            <td class="py-3.5 pr-6">
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-500/15 text-blue-400 ring-1 ring-inset ring-blue-500/30">
+                <%= server.plan.charAt(0).toUpperCase() + server.plan.slice(1) %>
+              </span>
+            </td>
+            <td class="py-3.5 pr-6 hidden lg:table-cell">
+              <div class="flex flex-wrap gap-x-2 text-xs text-zinc-500">
+                <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
+                <span class="text-zinc-700">·</span>
+                <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
+                <span class="text-zinc-700">·</span>
+                <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
+              </div>
+            </td>
+            <td class="py-3.5 pr-6">
+              <% if (subStatus === 'active') { %>
+                <div class="flex flex-col gap-y-0.5">
+                  <span class="inline-flex w-fit items-center gap-x-1 rounded-full px-2 py-0.5 text-xs font-medium bg-green-500/10 text-green-400 ring-1 ring-inset ring-green-500/20">
+                    <span class="h-1 w-1 rounded-full bg-green-400 shrink-0"></span>Active
+                  </span>
+                  <% if (daysLeft !== null) { %><span class="text-[10px] text-zinc-600">Renews in <%= daysLeft %>d</span><% } %>
+                </div>
+              <% } else if (subStatus === 'cancelled') { %>
+                <div class="flex flex-col gap-y-0.5">
+                  <span class="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20">Cancelled</span>
+                  <% if (daysLeft !== null) { %><span class="text-[10px] text-amber-500/70">Ends in <%= daysLeft %>d</span><% } %>
+                </div>
+              <% } else { %>
+                <span class="text-xs text-zinc-600">—</span>
+              <% } %>
+            </td>
+            <td class="py-3.5 pr-4 text-right">
+              <div class="flex items-center justify-end gap-x-2 flex-wrap gap-y-1">
+                <% if (subStatus === 'active') { %>
+                  <form action="/servers/<%= server.id %>/cancel-subscription" method="POST" class="inline">
+                    <button type="submit" class="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
+                      onclick="return confirm('Cancel subscription? Server will remain active until the billing cycle ends.')">Cancel Sub</button>
+                  </form>
+                <% } %>
+                <a href="/servers/<%= server.id %>/edit" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Edit</a>
+                <a href="/servers/<%= server.id %>/delete" class="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
+              </div>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="sm:hidden space-y-3 mb-10">
+      <% paidServers.forEach(server => {
+        const cycleEnd = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
+        const daysLeft = cycleEnd ? Math.max(0, Math.ceil((cycleEnd - Date.now()) / 86400000)) : null;
+        const subStatus = server.subscription_active === 1 ? 'active' : server.subscription_active === 2 ? 'cancelled' : null;
+        const ago = (() => { const d=Date.now()-new Date(server.created_at); const m=Math.floor(d/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?dy+'d ago':h>0?h+'h ago':m+'m ago'; })();
+      %>
+      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <div class="flex items-start justify-between gap-x-3 mb-3">
+          <div class="min-w-0">
+            <% if (server.pterodactyl_identifier && process.env.PTERODACTYL_PANEL_URL) { %>
+            <a href="<%= process.env.PTERODACTYL_PANEL_URL %>/server/<%= server.pterodactyl_identifier %>" target="_blank"
+              class="text-sm font-semibold text-white truncate block"><%= server.name %></a>
+            <% } else { %>
+            <p class="text-sm font-semibold text-white truncate"><%= server.name %></p>
+            <% } %>
+            <p class="text-xs text-zinc-600 mt-0.5"><%= ago %></p>
+          </div>
+          <span class="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-500/15 text-blue-400">
+            <%= server.plan %>
+          </span>
+        </div>
+        <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 mb-3">
+          <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
+          <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
+          <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
+        </div>
+        <% if (subStatus === 'active' && daysLeft !== null) { %>
+        <p class="text-xs text-green-400 mb-2">Active · renews in <%= daysLeft %>d</p>
+        <% } else if (subStatus === 'cancelled' && daysLeft !== null) { %>
+        <p class="text-xs text-amber-400 mb-2">Cancelled · ends in <%= daysLeft %>d</p>
+        <% } %>
+        <div class="flex items-center gap-x-2">
+          <% if (subStatus === 'active') { %>
+          <form action="/servers/<%= server.id %>/cancel-subscription" method="POST" class="flex-1">
+            <button type="submit" class="w-full text-center rounded-lg border border-amber-500/20 bg-amber-500/5 py-2 text-xs font-medium text-amber-400"
+              onclick="return confirm('Cancel subscription?')">Cancel Sub</button>
+          </form>
+          <% } %>
+          <a href="/servers/<%= server.id %>/edit" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300">Edit</a>
+          <a href="/servers/<%= server.id %>/delete" class="flex-1 text-center rounded-lg border border-red-500/20 bg-red-500/5 py-2 text-xs font-medium text-red-400">Delete</a>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- Plans -->
+  <div id="plans" class="px-4 pt-2 pb-16 sm:px-6 lg:px-8">
+    <div class="mb-5 flex items-end justify-between">
+      <div>
+        <p class="text-sm font-semibold text-white">Available Plans</p>
+        <p class="text-xs text-zinc-500 mt-0.5">Dedicated server with guaranteed resources, billed monthly.</p>
+      </div>
+      <% if (plans.length > 0) { %>
+      <span class="text-[10px] text-zinc-600"><%= plans.length %> plan<%= plans.length !== 1 ? 's' : '' %></span>
+      <% } %>
+    </div>
+
+    <% if (plans.length === 0) { %>
+    <div class="rounded-2xl border border-dashed border-white/10 py-10 text-center">
+      <p class="text-sm text-zinc-500">No plans available yet.</p>
+      <p class="text-xs text-zinc-600 mt-1">Check back later or contact the admin.</p>
+    </div>
+    <% } else { %>
+    <div class="card-grid">
+      <% plans.forEach(plan => { %>
+      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-blue-500/20 transition-colors flex flex-col">
+        <p class="text-sm font-semibold text-white mb-3"><%= plan.name %></p>
+        <ul class="space-y-1.5 text-xs text-zinc-400 mb-5 flex-1">
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
+        </ul>
+        <div class="flex items-end justify-between">
+          <div>
+            <p class="text-xl font-bold text-white">₹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
+            <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
+          </div>
+          <div class="flex flex-col gap-y-1.5">
+            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors text-center">UPI / Razorpay</a>
+            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-white/[0.08] transition-colors text-center">PayPal</a>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+
+</div><!-- /.app-main -->
+</body>
+</html>
