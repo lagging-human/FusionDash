@@ -247,6 +247,8 @@ function fmtEta(seconds) {
   return m > 0 ? `~${m}m ${s > 0 ? s+'s' : ''}` : `~${s}s`;
 }
 
+const seenDoneJobs = new Set();
+
 async function pollQueue() {
   try {
     const res  = await fetch('/api/queue');
@@ -282,10 +284,15 @@ async function pollQueue() {
 
     document.getElementById('queueSpinner').style.display = active.length ? '' : 'none';
 
-    const justDone = data.jobs.some(j => j.status === 'done' && j.server_id);
-    if (justDone && !window._reloading) {
+    // Only reload once per newly-completed job, never again for the same job
+    const newlyDone = data.jobs.filter(j => j.status === 'done' && j.server_id && !seenDoneJobs.has(j.id));
+    if (newlyDone.length && !window._reloading) {
+      newlyDone.forEach(j => seenDoneJobs.add(j.id));
       window._reloading = true;
-      setTimeout(() => location.reload(), 2000);
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      // Mark all done jobs as seen so future polls don't re-trigger
+      data.jobs.filter(j => j.status === 'done').forEach(j => seenDoneJobs.add(j.id));
     }
   } catch {}
 }
