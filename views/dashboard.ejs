@@ -248,6 +248,7 @@ function fmtEta(seconds) {
 }
 
 const seenDoneJobs = new Set();
+let firstPoll = true;
 
 async function pollQueue() {
   try {
@@ -258,7 +259,19 @@ async function pollQueue() {
     const list   = document.getElementById('queueJobs');
     const header = document.getElementById('queueHeader');
 
-    if (!data.jobs.length) { widget.classList.add('hidden'); return; }
+    // On the very first poll, mark all existing done jobs as already seen
+    // so we never reload for jobs that completed before this page loaded
+    if (firstPoll) {
+      firstPoll = false;
+      data.jobs.filter(j => j.status === 'done' || j.status === 'failed').forEach(j => seenDoneJobs.add(j.id));
+    }
+
+    if (!data.jobs.length || (!active.length && !data.jobs.some(j => j.status === 'done' && !seenDoneJobs.has(j.id)))) {
+      widget.classList.add('hidden');
+      // Still mark done as seen
+      data.jobs.filter(j => j.status === 'done').forEach(j => seenDoneJobs.add(j.id));
+      return;
+    }
     widget.classList.remove('hidden');
 
     if (header && data.info) {
@@ -284,14 +297,13 @@ async function pollQueue() {
 
     document.getElementById('queueSpinner').style.display = active.length ? '' : 'none';
 
-    // Only reload once per newly-completed job, never again for the same job
+    // Only reload once for a job that finished AFTER this page loaded
     const newlyDone = data.jobs.filter(j => j.status === 'done' && j.server_id && !seenDoneJobs.has(j.id));
     if (newlyDone.length && !window._reloading) {
       newlyDone.forEach(j => seenDoneJobs.add(j.id));
       window._reloading = true;
       setTimeout(() => location.reload(), 1500);
     } else {
-      // Mark all done jobs as seen so future polls don't re-trigger
       data.jobs.filter(j => j.status === 'done').forEach(j => seenDoneJobs.add(j.id));
     }
   } catch {}
