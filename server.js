@@ -194,7 +194,6 @@ app.post('/logout', (req, res, next) => req.logout(err => err ? next(err) : res.
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/dashboard', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
-  const plans   = getAllPlans.all();
   const free    = freeResources(req.user);
   const s       = settingsObj();
   const renewal = {
@@ -204,7 +203,16 @@ app.get('/dashboard', ensureAuth, (req, res) => {
     graceDays:  parseInt(s.renewal_grace_days || '1', 10),
   };
   res.render('dashboard', {
-    user: req.user, servers, plans, free, renewal, pageTitle: 'Dashboard',
+    user: req.user, servers, free, renewal, pageTitle: 'Dashboard',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.get('/billing', ensureAuth, (req, res) => {
+  const servers = getServersByUser.all(req.user.id);
+  const plans   = getAllPlans.all();
+  res.render('billing', {
+    user: req.user, servers, plans, pageTitle: 'Billing',
     error: req.query.error||null, success: req.query.success||null
   });
 });
