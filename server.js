@@ -846,14 +846,12 @@ app.get('/checkout/paypal/return', ensureAuth, async (req, res) => {
 // Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin', ensureAdmin, (req, res) => {
-  const txns = db.prepare(`SELECT t.*,u.username,u.email FROM transactions t JOIN users u ON t.user_id=u.id ORDER BY t.id DESC LIMIT 50`).all();
+  const userCount    = db.prepare('SELECT COUNT(*) as n FROM users').get().n;
+  const serverCount  = db.prepare('SELECT COUNT(*) as n FROM servers').get().n;
+  const paidTxnCount = db.prepare(`SELECT COUNT(*) as n FROM transactions WHERE status='paid'`).get().n;
   res.render('admin/index', {
-    user:req.user, settings:settingsObj(),
-    users:getAllUsers.all(), servers:getAllServersAdmin.all(),
-    plans:db.prepare('SELECT * FROM plans').all(),
-    storeItems:getAllStoreItems.all(), transactions:txns, pageTitle: 'Admin',
-    eggs: db.prepare('SELECT * FROM eggs ORDER BY nest_name, egg_name').all(),
-    nodes: db.prepare('SELECT * FROM nodes ORDER BY panel_node_id').all(),
+    user:req.user, settings:settingsObj(), pageTitle: 'Admin',
+    userCount, serverCount, paidTxnCount,
     error:req.query.error||null, success:req.query.success||null
   });
 });
@@ -872,49 +870,92 @@ app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
   // Checkbox: explicitly persist on/off (absent body field = unchecked)
   setSetting('hide_credit', req.body.hide_credit === '1' ? '1' : '0');
   audit(req.user, 'settings.update', { type:'settings', id:'global', name:'Settings' }, { fields: fields.filter(f => req.body[f] !== undefined) }, req.ip);
-  res.redirect('/admin?success=Settings+updated.#settings');
+  const dest = req.body.redirect === '/admin/apis' ? '/admin/apis' : '/admin';
+  res.redirect(dest + '?success=Settings+updated.');
+});
+
+// Dedicated /admin/apis page
+app.get('/admin/apis', ensureAdmin, (req, res) => {
+  res.render('admin/apis', {
+    user: req.user, settings: settingsObj(), pageTitle: 'Admin — Earn APIs',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// Dedicated /admin/servers page
+app.get('/admin/servers', ensureAdmin, (req, res) => {
+  res.render('admin/servers', {
+    user: req.user, servers: getAllServersAdmin.all(), pageTitle: 'Admin — Servers',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// Dedicated /admin/users page
+app.get('/admin/users', ensureAdmin, (req, res) => {
+  res.render('admin/users', {
+    user: req.user, users: getAllUsers.all(), pageTitle: 'Admin — Users',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// Dedicated /admin/transactions page
+app.get('/admin/transactions', ensureAdmin, (req, res) => {
+  const txns = db.prepare(`SELECT t.*,u.username,u.email FROM transactions t JOIN users u ON t.user_id=u.id ORDER BY t.id DESC LIMIT 50`).all();
+  res.render('admin/transactions', {
+    user: req.user, transactions: txns, pageTitle: 'Admin — Transactions',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// Dedicated /admin/eggs page
+app.get('/admin/eggs', ensureAdmin, (req, res) => {
+  res.render('admin/eggs', {
+    user: req.user, eggs: db.prepare('SELECT * FROM eggs ORDER BY nest_name, egg_name').all(),
+    pageTitle: 'Admin — Eggs',
+    error: req.query.error||null, success: req.query.success||null
+  });
 });
 
 
 app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
   const server=getServerById.get(req.params.id);
-  if (!server) return res.redirect('/admin?error=Not+found.');
+  if (!server) return res.redirect('/admin/servers?error=Not+found.');
   const specs={ memory:parseInt(req.body.memory,10), disk:parseInt(req.body.disk,10), cpu:parseInt(req.body.cpu,10), databases:parseInt(req.body.databases,10), backups:parseInt(req.body.backups,10) };
   try {
     await ptero.updateServerBuild(server.pterodactyl_server_id, specs);
     db.prepare('UPDATE servers SET memory=?,disk=?,cpu=?,databases=?,backups=? WHERE id=?').run(specs.memory,specs.disk,specs.cpu,specs.databases,specs.backups,server.id);
     audit(req.user, 'server.update_specs', { type:'server', id:server.id, name:server.name }, { before:{memory:server.memory,disk:server.disk,cpu:server.cpu}, after:specs }, req.ip);
-    res.redirect('/admin?success=Specs+updated.');
-  } catch(err) { res.redirect('/admin?error=Failed+to+update+specs.'); }
+    res.redirect('/admin/servers?success=Specs+updated.');
+  } catch(err) { res.redirect('/admin/servers?error=Failed+to+update+specs.'); }
 });
 
 app.post('/admin/servers/:id/delete', ensureAdmin, async (req, res) => {
   const server=getServerById.get(req.params.id);
-  if (!server) return res.redirect('/admin?error=Not+found.');
+  if (!server) return res.redirect('/admin/servers?error=Not+found.');
   try {
     await ptero.deleteServer(server.pterodactyl_server_id, true);
     returnResources(server.user_id, { memory:server.memory, disk:server.disk, cpu:server.cpu, ports:server.ports||1, databases:server.databases||0, backups:server.backups||0 });
     deleteServerRow.run(server.id);
     audit(req.user, 'server.delete', { type:'server', id:server.id, name:server.name }, { plan:server.plan, user_id:server.user_id }, req.ip);
-    res.redirect('/admin?success=Server+deleted.');
-  } catch(err) { res.redirect('/admin?error=Failed+to+delete.'); }
+    res.redirect('/admin/servers?success=Server+deleted.');
+  } catch(err) { res.redirect('/admin/servers?error=Failed+to+delete.'); }
 });
 
 app.post('/admin/users/:id/toggle-admin', ensureAdmin, (req, res) => {
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.redirect('/admin?error=Not+found.');
+  if (!u) return res.redirect('/admin/users?error=Not+found.');
   db.prepare('UPDATE users SET is_admin=? WHERE id=?').run(u.is_admin?0:1,u.id);
   audit(req.user, u.is_admin ? 'user.revoke_admin' : 'user.grant_admin', { type:'user', id:u.id, name:u.username }, {}, req.ip);
-  res.redirect('/admin?success=User+updated.');
+  res.redirect('/admin/users?success=User+updated.');
 });
 
 app.post('/admin/users/:id/gift-coins', ensureAdmin, (req, res) => {
   const amt=parseInt(req.body.amount,10)||0;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.redirect('/admin?error=Not+found.');
+  if (!u) return res.redirect('/admin/users?error=Not+found.');
   addCoins(req.params.id, amt, 'admin_gift', req.user.id);
   audit(req.user, 'user.gift_coins', { type:'user', id:u.id, name:u.username }, { amount:amt }, req.ip);
-  res.redirect('/admin?success=' + encodeURIComponent(`Gifted ${amt} coins to ${u.username}.`));
+  res.redirect('/admin/users?success=' + encodeURIComponent(`Gifted ${amt} coins to ${u.username}.`));
 });
 
 app.post('/admin/users/:id/set-resources', ensureAdmin, (req, res) => {
@@ -923,7 +964,7 @@ app.post('/admin/users/:id/set-resources', ensureAdmin, (req, res) => {
   db.prepare(`UPDATE users SET res_memory=?,res_disk=?,res_cpu=?,res_ports=?,res_databases=?,res_backups=? WHERE id=?`).run(...vals, req.params.id);
   const uForAudit = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   audit(req.user, 'user.set_resources', { type:'user', id:req.params.id, name:uForAudit?.username }, { memory:vals[0],disk:vals[1],cpu:vals[2],ports:vals[3],databases:vals[4],backups:vals[5] }, req.ip);
-  res.redirect('/admin?success=Resources+updated.');
+  res.redirect('/admin/users?success=Resources+updated.');
 });
 
 // ── Admin: Eggs ────────────────────────────────────────────
@@ -945,10 +986,10 @@ app.post('/admin/eggs/sync', ensureAdmin, async (req, res) => {
       }
     }
     audit(req.user, 'eggs.sync', { type:'eggs', id:'all', name:'Egg Sync' }, { count }, req.ip);
-    res.redirect('/admin?success=' + encodeURIComponent(`Synced ${count} eggs from panel.`) + '#eggs');
+    res.redirect('/admin/eggs?success=' + encodeURIComponent(`Synced ${count} eggs from panel.`));
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.redirect('/admin?error=' + encodeURIComponent('Failed to sync eggs from panel.') + '#eggs');
+    res.redirect('/admin/eggs?error=' + encodeURIComponent('Failed to sync eggs from panel.'));
   }
 });
 
@@ -956,15 +997,15 @@ app.post('/admin/eggs/sync', ensureAdmin, async (req, res) => {
 app.post('/admin/eggs/add', ensureAdmin, (req, res) => {
   const { nest_id, egg_id, nest_name, egg_name, description } = req.body;
   if (!nest_id || !egg_id || !egg_name) {
-    return res.redirect('/admin?error=' + encodeURIComponent('Nest ID, Egg ID and name are required.') + '#eggs');
+    return res.redirect('/admin/eggs?error=' + encodeURIComponent('Nest ID, Egg ID and name are required.'));
   }
   try {
     db.prepare(`INSERT OR IGNORE INTO eggs (nest_id, egg_id, nest_name, egg_name, description, active)
       VALUES (?,?,?,?,?,1)`).run(parseInt(nest_id), parseInt(egg_id), nest_name||'', egg_name, description||'');
     audit(req.user, 'eggs.add', { type:'egg', id:`${nest_id}:${egg_id}`, name:egg_name }, {}, req.ip);
-    res.redirect('/admin?success=' + encodeURIComponent(`Added egg: ${egg_name}`) + '#eggs');
+    res.redirect('/admin/eggs?success=' + encodeURIComponent(`Added egg: ${egg_name}`));
   } catch {
-    res.redirect('/admin?error=' + encodeURIComponent('Egg already exists.') + '#eggs');
+    res.redirect('/admin/eggs?error=' + encodeURIComponent('Egg already exists.'));
   }
 });
 
@@ -972,20 +1013,20 @@ app.post('/admin/eggs/add', ensureAdmin, (req, res) => {
 app.post('/admin/eggs/:id', ensureAdmin, (req, res) => {
   const { egg_name, nest_name, description, active } = req.body;
   const egg = db.prepare('SELECT * FROM eggs WHERE id=?').get(req.params.id);
-  if (!egg) return res.redirect('/admin?error=Egg+not+found.#eggs');
+  if (!egg) return res.redirect('/admin/eggs?error=Egg+not+found.');
   db.prepare('UPDATE eggs SET egg_name=?, nest_name=?, description=?, active=? WHERE id=?')
     .run(egg_name, nest_name||'', description||'', active ? 1 : 0, req.params.id);
   audit(req.user, active ? 'eggs.enable' : 'eggs.disable', { type:'egg', id:req.params.id, name:egg_name }, {}, req.ip);
-  res.redirect('/admin?success=' + encodeURIComponent(`Updated egg: ${egg_name}`) + '#eggs');
+  res.redirect('/admin/eggs?success=' + encodeURIComponent(`Updated egg: ${egg_name}`));
 });
 
 // Delete egg
 app.post('/admin/eggs/:id/delete', ensureAdmin, (req, res) => {
   const egg = db.prepare('SELECT * FROM eggs WHERE id=?').get(req.params.id);
-  if (!egg) return res.redirect('/admin?error=Egg+not+found.#eggs');
+  if (!egg) return res.redirect('/admin/eggs?error=Egg+not+found.');
   db.prepare('DELETE FROM eggs WHERE id=?').run(req.params.id);
   audit(req.user, 'eggs.delete', { type:'egg', id:req.params.id, name:egg.egg_name }, {}, req.ip);
-  res.redirect('/admin?success=' + encodeURIComponent(`Deleted egg: ${egg.egg_name}`) + '#eggs');
+  res.redirect('/admin/eggs?success=' + encodeURIComponent(`Deleted egg: ${egg.egg_name}`));
 });
 
 // ── Admin: Plans ────────────────────────────────────────────────────────────
@@ -1018,14 +1059,14 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
     .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
-  res.redirect('/admin?success=Plan+updated.');
+  res.redirect('/admin/plans?success=Plan+updated.');
 });
 
 // Bulk-save every plan row at once from the admin Plans tab ("Save Changes" button)
 app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   const rows = req.body.plans || {};
   const keys = Object.keys(rows);
-  if (!keys.length) return res.redirect('/admin?error=No+plans+to+save.#plans');
+  if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
   const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`);
   const saveAll = db.transaction((rows) => {
     for (const key of Object.keys(rows)) {
@@ -1040,7 +1081,7 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   });
   saveAll(rows);
   audit(req.user, 'plan.bulk_update', { type:'plan', id:'bulk', name:'Plans' }, { keys }, req.ip);
-  res.redirect('/admin?success=' + encodeURIComponent(`Saved ${keys.length} plan(s).`) + '#plans');
+  res.redirect('/admin/plans?success=' + encodeURIComponent(`Saved ${keys.length} plan(s).`));
 });
 
 app.post('/admin/plans/:key/delete', ensureAdmin, (req, res) => {
@@ -1099,14 +1140,14 @@ app.post('/admin/store/:key', ensureAdmin, (req, res) => {
   db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`)
     .run(name,description,resource,parseInt(amount,10),parseInt(cost,10),active?1:0,req.params.key);
   audit(req.user, 'store.update_item', { type:'store_item', id:req.params.key, name }, {}, req.ip);
-  res.redirect('/admin?success=Store+item+updated.');
+  res.redirect('/admin/store?success=Store+item+updated.');
 });
 
 // Bulk-save every store item row at once from the admin Store tab ("Save Changes" button)
 app.post('/admin/store/bulk-update', ensureAdmin, (req, res) => {
   const rows = req.body.items || {};
   const keys = Object.keys(rows);
-  if (!keys.length) return res.redirect('/admin?error=No+items+to+save.#store');
+  if (!keys.length) return res.redirect('/admin/store?error=No+items+to+save.');
   const stmt = db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`);
   const saveAll = db.transaction((rows) => {
     for (const key of Object.keys(rows)) {
@@ -1116,7 +1157,7 @@ app.post('/admin/store/bulk-update', ensureAdmin, (req, res) => {
   });
   saveAll(rows);
   audit(req.user, 'store.bulk_update', { type:'store_item', id:'bulk', name:'Store Items' }, { keys }, req.ip);
-  res.redirect('/admin?success=' + encodeURIComponent(`Saved ${keys.length} item(s).`) + '#store');
+  res.redirect('/admin/store?success=' + encodeURIComponent(`Saved ${keys.length} item(s).`));
 });
 
 app.post('/admin/store/:key/delete', ensureAdmin, (req, res) => {
