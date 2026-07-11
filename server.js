@@ -153,7 +153,10 @@ app.use((req, res, next) => {
   res.locals.appFavicon = s.app_favicon_url || '';
   res.locals.icon       = icon;
   res.locals.appVersion = require('./package.json').version || '1.0.0';
+  // Dashboard Credit: when disabled, hides FusionDash promo/GitHub links across public views
+  res.locals.hideCredit = s.hide_credit === '1';
   next();
+
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,6 +172,21 @@ app.get('/api/stats', (req, res) => {
   delete stats.install_id;
   res.json({ ok: true, stats });
 });
+
+// Public plans page + API
+app.get('/plans', (req, res) => {
+  const plans = db.prepare('SELECT * FROM plans WHERE active=1 ORDER BY price_inr ASC').all();
+  res.render('plans', { user: req.user, plans, pageTitle: 'Plans' });
+});
+
+app.get('/api/plans', (req, res) => {
+  const plans = db.prepare(`
+    SELECT key,name,price_inr,price_usd,memory,disk,cpu,databases,backups
+    FROM plans WHERE active=1 ORDER BY price_inr ASC
+  `).all();
+  res.json({ ok: true, plans });
+});
+
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
   res.render('login', { error: req.query.error || null, pageTitle: 'Login' });
@@ -851,9 +869,12 @@ app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
     'queue_enabled','queue_delay_seconds','queue_max_parallel'
   ];
   for (const f of fields) if (req.body[f] !== undefined) setSetting(f, req.body[f]);
+  // Checkbox: explicitly persist on/off (absent body field = unchecked)
+  setSetting('hide_credit', req.body.hide_credit === '1' ? '1' : '0');
   audit(req.user, 'settings.update', { type:'settings', id:'global', name:'Settings' }, { fields: fields.filter(f => req.body[f] !== undefined) }, req.ip);
   res.redirect('/admin?success=Settings+updated.#settings');
 });
+
 
 app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
   const server=getServerById.get(req.params.id);
@@ -1000,6 +1021,28 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   res.redirect('/admin?success=Plan+updated.');
 });
 
+// Bulk-save every plan row at once from the admin Plans tab ("Save Changes" button)
+app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
+  const rows = req.body.plans || {};
+  const keys = Object.keys(rows);
+  if (!keys.length) return res.redirect('/admin?error=No+plans+to+save.#plans');
+  const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`);
+  const saveAll = db.transaction((rows) => {
+    for (const key of Object.keys(rows)) {
+      const r = rows[key];
+      stmt.run(
+        r.name, parseInt(r.price_inr,10)||0, parseFloat(r.price_usd)||0,
+        parseInt(r.memory,10)||0, parseInt(r.disk,10)||0, parseInt(r.cpu,10)||0,
+        parseInt(r.databases,10)||0, parseInt(r.backups,10)||0,
+        r.active ? 1 : 0, key
+      );
+    }
+  });
+  saveAll(rows);
+  audit(req.user, 'plan.bulk_update', { type:'plan', id:'bulk', name:'Plans' }, { keys }, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent(`Saved ${keys.length} plan(s).`) + '#plans');
+});
+
 app.post('/admin/plans/:key/delete', ensureAdmin, (req, res) => {
   const plan = db.prepare('SELECT * FROM plans WHERE key=?').get(req.params.key);
   if (!plan) return res.redirect('/admin/plans?error=Plan+not+found.');
@@ -1057,6 +1100,23 @@ app.post('/admin/store/:key', ensureAdmin, (req, res) => {
     .run(name,description,resource,parseInt(amount,10),parseInt(cost,10),active?1:0,req.params.key);
   audit(req.user, 'store.update_item', { type:'store_item', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin?success=Store+item+updated.');
+});
+
+// Bulk-save every store item row at once from the admin Store tab ("Save Changes" button)
+app.post('/admin/store/bulk-update', ensureAdmin, (req, res) => {
+  const rows = req.body.items || {};
+  const keys = Object.keys(rows);
+  if (!keys.length) return res.redirect('/admin?error=No+items+to+save.#store');
+  const stmt = db.prepare(`UPDATE store_items SET name=?,description=?,resource=?,amount=?,cost=?,active=? WHERE key=?`);
+  const saveAll = db.transaction((rows) => {
+    for (const key of Object.keys(rows)) {
+      const r = rows[key];
+      stmt.run(r.name, r.description||'', r.resource, parseInt(r.amount,10)||0, parseInt(r.cost,10)||0, r.active ? 1 : 0, key);
+    }
+  });
+  saveAll(rows);
+  audit(req.user, 'store.bulk_update', { type:'store_item', id:'bulk', name:'Store Items' }, { keys }, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent(`Saved ${keys.length} item(s).`) + '#store');
 });
 
 app.post('/admin/store/:key/delete', ensureAdmin, (req, res) => {
