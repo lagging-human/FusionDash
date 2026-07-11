@@ -97,73 +97,78 @@
     </div>
     <% } %>
 
-    <% storeItems.forEach(item => {
-      const rColors = { memory:'text-blue-400', disk:'text-violet-400', cpu:'text-orange-400', ports:'text-teal-400', databases:'text-pink-400', backups:'text-amber-400', coins:'text-yellow-400' };
-      const rColor = rColors[item.resource] || 'text-zinc-400';
-    %>
-    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
-      <div class="flex flex-wrap items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
-        <p class="text-sm font-semibold text-white"><%= item.name %></p>
-        <code class="text-xs text-zinc-500 bg-zinc-900 rounded px-2 py-0.5"><%= item.key %></code>
-        <span class="text-xs font-medium <%= rColor %>"><%= item.resource %></span>
-        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-          <%= item.active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-500' %>">
-          <%= item.active ? 'Active' : 'Inactive' %>
-        </span>
-        <form action="/admin/store/<%= item.key %>/delete" method="POST" class="ml-auto"
-          onsubmit="return confirm('Delete <%= item.name %>?')">
-          <button type="submit" class="rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/15 transition-colors">
+    <% if (storeItems.length) { %>
+    <form action="/admin/store/bulk-update" method="POST" class="space-y-5 pb-16">
+      <% storeItems.forEach(item => {
+        const rColors = { memory:'text-blue-400', disk:'text-violet-400', cpu:'text-orange-400', ports:'text-teal-400', databases:'text-pink-400', backups:'text-amber-400', coins:'text-yellow-400' };
+        const rColor = rColors[item.resource] || 'text-zinc-400';
+      %>
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex flex-wrap items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <p class="text-sm font-semibold text-white"><%= item.name %></p>
+          <code class="text-xs text-zinc-500 bg-zinc-900 rounded px-2 py-0.5"><%= item.key %></code>
+          <span class="text-xs font-medium <%= rColor %>"><%= item.resource %></span>
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+            <%= item.active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-500' %>">
+            <%= item.active ? 'Active' : 'Inactive' %>
+          </span>
+          <button type="submit" formaction="/admin/store/<%= item.key %>/delete" formnovalidate class="ml-auto rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/15 transition-colors"
+            onclick="return confirm('Delete <%= item.name %>?')">
             Delete
           </button>
-        </form>
-      </div>
-      <form action="/admin/store/<%= item.key %>/update" method="POST" class="p-5">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Name</label>
-            <input type="text" name="name" value="<%= item.name %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
-          </div>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Description</label>
-            <input type="text" name="description" value="<%= item.description || '' %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
-          </div>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Resource</label>
-            <select name="resource" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
-              <% ['memory','disk','cpu','ports','databases','backups','coins'].forEach(r => { %>
-              <option value="<%= r %>" <%= item.resource===r?'selected':'' %>><%= r %></option>
-              <% }) %>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Amount</label>
-            <input type="number" name="amount" value="<%= item.amount %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
-          </div>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Cost (coins)</label>
-            <input type="number" name="cost" value="<%= item.cost %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
-          </div>
         </div>
-        <div class="flex items-center gap-x-4">
-          <label class="flex items-center gap-x-3 cursor-pointer select-none">
+        <div class="p-5">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Name</label>
+              <input type="text" name="items[<%= item.key %>][name]" value="<%= item.name %>"
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Description</label>
+              <input type="text" name="items[<%= item.key %>][description]" value="<%= item.description || '' %>"
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Resource</label>
+              <select name="items[<%= item.key %>][resource]" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                <% ['memory','disk','cpu','ports','databases','backups','coins'].forEach(r => { %>
+                <option value="<%= r %>" <%= item.resource===r?'selected':'' %>><%= r %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Amount</label>
+              <input type="number" name="items[<%= item.key %>][amount]" value="<%= item.amount %>"
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Cost (coins)</label>
+              <input type="number" name="items[<%= item.key %>][cost]" value="<%= item.cost %>"
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+            </div>
+          </div>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
             <div class="relative">
-              <input type="checkbox" name="active" <%= item.active ? 'checked' : '' %> class="sr-only peer">
+              <input type="checkbox" name="items[<%= item.key %>][active]" <%= item.active ? 'checked' : '' %> class="sr-only peer">
               <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
               <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
             </div>
             <span class="text-sm text-zinc-300">Active</span>
           </label>
-          <button type="submit" class="rounded-full bg-blue-500/15 px-5 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        </div>
+      </div>
+      <% }) %>
+
+      <div class="fixed bottom-0 inset-x-0 z-20">
+        <div class="px-4 sm:px-6 lg:px-8 py-3 bg-zinc-950/95 backdrop-blur border-t border-white/[0.06] flex justify-end">
+          <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
             Save Changes
           </button>
         </div>
-      </form>
-    </div>
-    <% }) %>
+      </div>
+    </form>
+    <% } %>
 
   </div>
 </div>
