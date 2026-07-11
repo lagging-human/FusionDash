@@ -1068,13 +1068,22 @@ function resolvePorts(raw, fallback) {
   return Number.isFinite(fb) && fb >= 1 ? fb : 1;
 }
 
+// Admin enters plain rupees (e.g. 200 for ₹200); DB/Razorpay need paise (smallest unit).
+// Converts on the way in; views divide by 100 on the way out (unchanged).
+function rupeesToPaise(raw, fallback = 0) {
+  const n = parseFloat(raw);
+  if (Number.isFinite(n) && n >= 0) return Math.round(n * 100);
+  const fb = parseFloat(fallback);
+  return Number.isFinite(fb) && fb >= 0 ? Math.round(fb) : 0;
+}
+
 app.post('/admin/plans/create', ensureAdmin, (req, res) => {
   const {key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports}=req.body;
   if (!key||!name) return res.redirect('/admin/plans?error=Key+and+name+are+required.');
   try {
     db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active)
       VALUES (?,?,?,?,?,?,?,?,?,?,1)`)
-      .run(key, name, parseInt(price_inr,10)||0, parseFloat(price_usd)||0,
+      .run(key, name, rupeesToPaise(price_inr, 0), parseFloat(price_usd)||0,
           parseInt(memory,10)||0, parseInt(disk,10)||0, parseInt(cpu,10)||0,
           parseInt(databases,10)||1, parseInt(backups,10)||1, resolvePorts(ports, 1));
     audit(req.user, 'plan.create', { type:'plan', id:key, name }, {}, req.ip);
@@ -1084,9 +1093,9 @@ app.post('/admin/plans/create', ensureAdmin, (req, res) => {
 
 app.post('/admin/plans/:key/update', ensureAdmin, (req, res) => {
   const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
-  const existing = db.prepare('SELECT ports FROM plans WHERE key=?').get(req.params.key);
+  const existing = db.prepare('SELECT ports, price_inr FROM plans WHERE key=?').get(req.params.key);
   db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
-    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
+    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
@@ -1098,18 +1107,19 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   const rows = req.body.plans || {};
   const keys = Object.keys(rows);
   if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
-  const existingPorts = new Map(
-    db.prepare(`SELECT key, ports FROM plans WHERE key IN (${keys.map(()=>'?').join(',')})`).all(...keys)
-      .map(p => [p.key, p.ports])
+  const existingPlans = new Map(
+    db.prepare(`SELECT key, ports, price_inr FROM plans WHERE key IN (${keys.map(()=>'?').join(',')})`).all(...keys)
+      .map(p => [p.key, p])
   );
   const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`);
   const saveAll = db.transaction((rows) => {
     for (const key of Object.keys(rows)) {
       const r = rows[key];
+      const existing = existingPlans.get(key);
       stmt.run(
-        r.name, parseInt(r.price_inr,10)||0, parseFloat(r.price_usd)||0,
+        r.name, rupeesToPaise(r.price_inr, existing?.price_inr), parseFloat(r.price_usd)||0,
         parseInt(r.memory,10)||0, parseInt(r.disk,10)||0, parseInt(r.cpu,10)||0,
-        parseInt(r.databases,10)||0, parseInt(r.backups,10)||0, resolvePorts(r.ports, existingPorts.get(key)),
+        parseInt(r.databases,10)||0, parseInt(r.backups,10)||0, resolvePorts(r.ports, existing?.ports),
         r.active ? 1 : 0, key
       );
     }
@@ -1122,9 +1132,9 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
 // Legacy route kept for backwards compat
 app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
   const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
-  const existing = db.prepare('SELECT ports FROM plans WHERE key=?').get(req.params.key);
+  const existing = db.prepare('SELECT ports, price_inr FROM plans WHERE key=?').get(req.params.key);
   db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
-    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
+    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
