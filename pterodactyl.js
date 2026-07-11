@@ -92,32 +92,49 @@ async function getEgg(nestId, eggId) {
 }
 
 /**
+ * Find up to `count` free (unassigned) allocations on the given node.
+ * Returns an array of allocation ids (may be shorter than `count` if the
+ * node doesn't have enough free allocations).
+ */
+async function findFreeAllocations(nodeId, count) {
+  const found = [];
+  let page = 1;
+  while (found.length < count) {
+    const res = await api.get(`/nodes/${nodeId}/allocations`, { params: { per_page: 100, page } });
+    for (const a of res.data.data) {
+      if (!a.attributes.assigned) found.push(a.attributes.id);
+      if (found.length >= count) break;
+    }
+    const meta = res.data.meta?.pagination;
+    if (!meta || page >= meta.total_pages) break;
+    page++;
+  }
+  return found;
+}
+
+/**
  * Find a free (unassigned) allocation on the given node.
  * Returns the allocation id, or null if none available.
  */
 async function findFreeAllocation(nodeId) {
-  let page = 1;
-  while (true) {
-    const res = await api.get(`/nodes/${nodeId}/allocations`, { params: { per_page: 100, page } });
-    const free = res.data.data.find(a => !a.attributes.assigned);
-    if (free) return free.attributes.id;
-
-    const meta = res.data.meta?.pagination;
-    if (!meta || page >= meta.total_pages) return null;
-    page++;
-  }
+  const [id] = await findFreeAllocations(nodeId, 1);
+  return id || null;
 }
 
 /**
  * Create a server for a panel user on a specific node, nest, and egg.
- * specs: { memory, disk, cpu, databases, backups }
+ * specs: { memory, disk, cpu, databases, backups, ports }
  */
 async function createServer({ panelUserId, name, nestId, eggId, nodeId, specs, description }) {
   const { egg, environment } = await getEgg(nestId, eggId);
 
-  const allocationId = await findFreeAllocation(nodeId);
-  if (!allocationId) {
+  const portCount = Math.max(1, parseInt(specs.ports, 10) || 1);
+  const allocationIds = await findFreeAllocations(nodeId, portCount);
+  if (!allocationIds.length) {
     throw new Error(`No free allocations available on node ${nodeId}`);
+  }
+  if (allocationIds.length < portCount) {
+    throw new Error(`Only ${allocationIds.length} of ${portCount} requested port allocations are free on node ${nodeId}`);
   }
 
   const payload = {
@@ -138,10 +155,11 @@ async function createServer({ panelUserId, name, nestId, eggId, nodeId, specs, d
     feature_limits: {
       databases: specs.databases ?? 1,
       backups: specs.backups ?? 1,
-      allocations: 1
+      allocations: portCount
     },
     allocation: {
-      default: allocationId
+      default: allocationIds[0],
+      additional: allocationIds.slice(1)
     }
   };
 
@@ -164,7 +182,7 @@ async function updateServerBuild(serverId, specs) {
     feature_limits: {
       databases: specs.databases ?? 1,
       backups: specs.backups ?? 1,
-      allocations: 1
+      allocations: Math.max(1, parseInt(specs.ports, 10) || 1)
     }
   });
   return res.data;
