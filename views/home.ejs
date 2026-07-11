@@ -69,6 +69,8 @@
     </div>
 
     <!-- Live stats -->
+    <% const anyStatVisible = Object.values(statVisibility).some(Boolean); %>
+    <% if (anyStatVisible) { %>
     <div class="border-t border-white/[0.06] bg-white/[0.02]">
       <div class="max-w-4xl mx-auto px-6 py-10">
         <p class="text-xs font-semibold text-zinc-600 uppercase tracking-widest text-center mb-6">
@@ -76,31 +78,40 @@
         </p>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 
+          <% if (statVisibility.users) { %>
           <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
             <p class="text-3xl font-bold text-white"><%= stats.users %></p>
             <p class="text-xs text-zinc-500 mt-1">Registered users</p>
           </div>
+          <% } %>
 
+          <% if (statVisibility.servers) { %>
           <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
             <p class="text-3xl font-bold text-white"><%= stats.servers %></p>
             <p class="text-xs text-zinc-500 mt-1">Servers created</p>
           </div>
+          <% } %>
 
+          <% if (statVisibility.paid_transactions) { %>
           <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
             <p class="text-3xl font-bold text-white"><%= stats.paid_transactions %></p>
             <p class="text-xs text-zinc-500 mt-1">Paid orders</p>
           </div>
+          <% } %>
 
+          <% if (statVisibility.free_servers) { %>
           <div class="rounded-2xl bg-zinc-900/60 border border-white/[0.06] p-5 text-center">
             <p class="text-3xl font-bold text-white"><%= stats.free_servers %></p>
             <p class="text-xs text-zinc-500 mt-1">Free servers active</p>
           </div>
+          <% } %>
 
         </div>
 
         <!-- Second row — extra stats if > 0 -->
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
 
+          <% if (statVisibility.paid_servers) { %>
           <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3">
             <%- icon('server', 'h-5 w-5 text-blue-400 shrink-0') %>
             <div>
@@ -108,7 +119,9 @@
               <p class="text-xs text-zinc-600">Paid plan servers</p>
             </div>
           </div>
+          <% } %>
 
+          <% if (statVisibility.admins) { %>
           <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3">
             <%- icon('users', 'h-5 w-5 text-purple-400 shrink-0') %>
             <div>
@@ -116,7 +129,9 @@
               <p class="text-xs text-zinc-600">Admins</p>
             </div>
           </div>
+          <% } %>
 
+          <% if (statVisibility.revenue) { %>
           <div class="rounded-2xl bg-zinc-900/40 border border-white/[0.04] px-5 py-4 flex items-center gap-x-3 sm:col-span-1 col-span-2">
             <%- icon('money', 'h-5 w-5 text-green-400 shrink-0') %>
             <div>
@@ -127,10 +142,12 @@
               <p class="text-xs text-zinc-600">Total revenue</p>
             </div>
           </div>
+          <% } %>
 
         </div>
       </div>
     </div>
+    <% } %>
 
     <!-- Footer -->
     <footer class="border-t border-white/[0.06] px-6 py-4 flex flex-wrap items-center justify-between gap-2">
