@@ -74,6 +74,11 @@
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
           </div>
           <div>
+            <label class="block text-xs text-zinc-500 mb-1">Ports</label>
+            <input type="number" name="ports" placeholder="1" value="1" min="1"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+          </div>
+          <div>
             <label class="block text-xs text-zinc-500 mb-1">Databases</label>
             <input type="number" name="databases" value="2"
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
@@ -117,10 +122,10 @@
           <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
             <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],
                 ['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],
-                ['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
+                ['ports','Ports','number'],['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
             <div>
               <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
-              <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= plan[k] %>" <%= t==='number'?'step="any"':'' %>
+              <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= plan[k] %>" <%= t==='number'?'step="any"':'' %> <%= k==='ports'?'min="1"':'' %>
                 class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
             </div>
             <% }) %>
