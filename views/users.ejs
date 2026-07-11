@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/ Users</span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Users</p>
+    </div>
+    <span class="text-xs text-zinc-600"><%= users.length %> user<%= users.length !== 1 ? 's' : '' %></span>
+  </div>
+
+  <%- include('../components/admin_tabs', { adminTab: 'users' }) %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-20 space-y-3">
+    <% if (!users.length) { %>
+    <div class="rounded-2xl border border-dashed border-white/10 py-12 text-center"><p class="text-sm text-zinc-500">No users yet.</p></div>
+    <% } %>
+    <% users.forEach(u => { %>
+    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+      <div class="flex flex-wrap items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+        <% if (u.avatar) { %><img src="<%= u.avatar %>" class="h-8 w-8 rounded-full shrink-0" alt=""><% } else { %>
+        <div class="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-300 shrink-0"><%= u.username?u.username[0].toUpperCase():'?' %></div>
+        <% } %>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-white truncate"><%= u.username %> <% if (u.is_admin) { %><span class="ml-1 text-xs text-indigo-400">(admin)</span><% } %></p>
+          <p class="text-xs text-zinc-500 truncate"><%= u.email %> &middot; via <%= u.provider %> &middot; Panel ID: <%= u.pterodactyl_user_id||'—' %></p>
+        </div>
+        <div class="flex items-center gap-x-1.5 text-sm text-yellow-400 shrink-0"><%- icon('coin', 'h-4 w-4') %> <span class="font-bold"><%= u.coins %></span></div>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Pool editor -->
+        <div>
+          <p class="text-xs text-zinc-500 mb-2">Resource Pool</p>
+          <form action="/admin/users/<%= u.id %>/set-resources" method="POST" class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <% [['res_memory','RAM (MB)'],['res_disk','Disk (MB)'],['res_cpu','CPU (%)'],['res_ports','Ports'],['res_databases','DBs'],['res_backups','Backups']].forEach(([k,l]) => { %>
+            <div>
+              <label class="block text-[10px] text-zinc-600 mb-1"><%= l %></label>
+              <input type="number" name="<%= k %>" value="<%= u[k] %>"
+                class="block w-full rounded-lg border-none py-1.5 pl-2 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-xs focus:ring-blue-400">
+            </div>
+            <% }) %>
+            <div class="col-span-3 sm:col-span-6">
+              <button type="submit" class="rounded-full bg-zinc-700/50 px-4 py-1.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-zinc-700 transition-colors">Update Resources</button>
+            </div>
+          </form>
+        </div>
+        <!-- Coin gift + admin toggle -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 border-t border-white/[0.04]">
+          <form action="/admin/users/<%= u.id %>/gift-coins" method="POST" class="flex items-center gap-x-2">
+            <input type="number" name="amount" value="100" min="1"
+              class="w-20 rounded-lg border-none py-1.5 pl-2 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-xs focus:ring-yellow-400 text-center">
+            <button type="submit" class="rounded-full bg-yellow-400/10 px-4 py-1.5 text-xs font-semibold text-yellow-400 ring-1 ring-inset ring-yellow-400/20 hover:bg-yellow-400/15 transition-colors">Gift Coins</button>
+          </form>
+          <form action="/admin/users/<%= u.id %>/toggle-admin" method="POST">
+            <button type="submit" class="rounded-full bg-indigo-500/10 px-4 py-1.5 text-xs font-medium text-indigo-400 ring-1 ring-inset ring-indigo-500/20 hover:bg-indigo-500/15 transition-colors">
+              <%= u.is_admin ? 'Revoke Admin' : 'Make Admin' %>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+  </div>
+</div>
+</body>
+</html>

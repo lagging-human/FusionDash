@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/ Earn APIs</span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Earn APIs</p>
+    </div>
+  </div>
+
+  <%- include('../components/admin_tabs', { adminTab: 'apis' }) %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-20 space-y-4">
+    <form action="/admin/settings/defaults" method="POST" class="space-y-4">
+      <input type="hidden" name="redirect" value="/admin/apis">
+
+      <!-- Work.ink -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('link', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Work.ink</p>
+          <a href="https://work.ink/developers" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">API Key / Secret (sent as <code>secret</code> param)</label>
+            <input type="text" name="workink_api_key" value="<%= settings.workink_api_key || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="sk_...">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Offer / Locker ID (slug in work.ink/<strong>ID</strong>)</label>
+            <input type="text" name="workink_offer_id" value="<%= settings.workink_offer_id || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm" placeholder="abc123">
+          </div>
+        </div>
+        <div class="px-5 pb-4 text-xs text-zinc-600">
+          Postback URL to set in Work.ink dashboard:
+          <code class="text-zinc-400 ml-1"><%= settings.dashboard_url || 'https://yourdomain.com' %>/earn/workink/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret=<%= settings.workink_api_key || 'YOUR_KEY' %></code>
+        </div>
+      </div>
+
+      <!-- Paymentwall -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('card', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Paymentwall Offerwall</p>
+          <a href="https://docs.paymentwall.com/integration/widget/offerwall" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">App Key (Public)</label>
+            <input type="text" name="paymentwall_app_key" value="<%= settings.paymentwall_app_key || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="t_...">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Secret Key</label>
+            <input type="text" name="paymentwall_secret_key" value="<%= settings.paymentwall_secret_key || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="t_...">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Widget Code</label>
+            <select name="paymentwall_widget" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+              <option value="mw6" <%= settings.paymentwall_widget==='mw6'?'selected':'' %>>mw6 (new)</option>
+              <option value="mw1" <%= settings.paymentwall_widget==='mw1'?'selected':'' %>>mw1 (classic)</option>
+            </select>
+          </div>
+        </div>
+        <div class="px-5 pb-4 text-xs text-zinc-600">
+          Pingback URL to set in Paymentwall dashboard:
+          <code class="text-zinc-400 ml-1"><%= settings.dashboard_url || 'https://yourdomain.com' %>/earn/paymentwall/callback</code>
+        </div>
+      </div>
+
+      <!-- Notik -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('bolt', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Notik</p>
+          <a href="https://notik.me" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Dashboard →</a>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">API Key</label>
+            <input type="text" name="notik_api_key" value="<%= settings.notik_api_key || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="nk_...">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Secret Key (for postback validation)</label>
+            <input type="text" name="notik_secret_key" value="<%= settings.notik_secret_key || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="sk_...">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Offer Wall URL (from Notik dashboard)</label>
+            <input type="text" name="notik_offer_url" value="<%= settings.notik_offer_url || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm" placeholder="https://notik.me/offers?api_key=...">
+          </div>
+        </div>
+        <div class="px-5 pb-4 text-xs text-zinc-600">
+          Postback URL to set in Notik dashboard:
+          <code class="text-zinc-400 ml-1"><%= settings.dashboard_url || 'https://yourdomain.com' %>/earn/notik/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret=<%= settings.notik_secret_key || 'YOUR_SECRET' %></code>
+        </div>
+      </div>
+
+      <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        Save API Settings
+      </button>
+    </form>
+  </div>
+</div>
+</body>
+</html>
