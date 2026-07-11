@@ -1,0 +1,23 @@
+<%
+  const _adminTabs = [
+    { id:'settings', label:'Settings',     href:'/admin',              iconName:'settings' },
+    { id:'apis',     label:'Earn APIs',    href:'/admin/apis',         iconName:'link'     },
+    { id:'plans',    label:'Plans',        href:'/admin/plans',        iconName:'money'    },
+    { id:'store',    label:'Store Items',  href:'/admin/store',        iconName:'cart'     },
+    { id:'nodes',    label:'Nodes',        href:'/admin/nodes',        iconName:'server'   },
+    { id:'servers',  label:'Servers',      href:'/admin/servers',      iconName:'server'   },
+    { id:'users',    label:'Users',        href:'/admin/users',        iconName:'users'    },
+    { id:'txns',     label:'Transactions', href:'/admin/transactions', iconName:'list'     },
+    { id:'eggs',     label:'Eggs',         href:'/admin/eggs',         iconName:'database' },
+    { id:'audit',    label:'Audit Log',    href:'/admin/audit',        iconName:'refresh'  },
+  ];
+%>
+<div class="sticky top-0 z-10 flex overflow-x-auto gap-x-0.5 px-4 sm:px-6 lg:px-8 bg-[#0c0d0f] border-b border-white/[0.06]">
+  <% _adminTabs.forEach(tab => { %>
+  <a href="<%= tab.href %>"
+    class="tab-btn shrink-0 flex items-center gap-x-1.5 px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap
+      <%= typeof adminTab !== 'undefined' && adminTab === tab.id ? 'border-blue-400 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:border-zinc-600' %>">
+    <%- icon(tab.iconName, 'h-3.5 w-3.5') %> <%= tab.label %>
+  </a>
+  <% }) %>
+</div>
