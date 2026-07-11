@@ -13,6 +13,12 @@ const { audit } = require('./audit');
 const { firstRunSetup } = require('./first-run');
 
 const app = express();
+
+// TEMP DEBUG — remove once the ports issue is confirmed fixed
+app.use((req, res, next) => {
+  console.log(`[REQ] ${req.method} ${req.url}`);
+  next();
+});
 app.set('view engine', 'ejs');
 app.set('views', __dirname + '/views');
 app.use(express.static(__dirname + '/public'));
@@ -1103,7 +1109,7 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
 
 // Bulk-save every plan row at once from the admin Plans tab ("Save Changes" button)
 app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
-  console.log('PLANS BODY:', JSON.stringify(req.body.plans, null, 2));
+  console.log('[PLANS BODY]', JSON.stringify(req.body.plans, null, 2)); // TEMP DEBUG
   const rows = req.body.plans || {};
   const keys = Object.keys(rows);
   if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
