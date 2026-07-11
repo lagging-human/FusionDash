@@ -1103,6 +1103,7 @@ app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
 
 // Bulk-save every plan row at once from the admin Plans tab ("Save Changes" button)
 app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
+  console.log('PLANS BODY:', JSON.stringify(req.body.plans, null, 2));
   const rows = req.body.plans || {};
   const keys = Object.keys(rows);
   if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
