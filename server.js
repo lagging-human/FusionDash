@@ -164,12 +164,30 @@ app.use((req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
-  res.render('home', { user: req.user, stats: getLiveStats(), pageTitle: 'Home' });
+  const s = settingsObj();
+  const statVisibility = {
+    users:             s.stat_show_users             !== '0',
+    servers:           s.stat_show_servers           !== '0',
+    paid_transactions: s.stat_show_paid_transactions !== '0',
+    free_servers:      s.stat_show_free_servers      !== '0',
+    paid_servers:      s.stat_show_paid_servers      !== '0',
+    admins:            s.stat_show_admins            !== '0',
+    revenue:           s.stat_show_revenue           !== '0',
+  };
+  res.render('home', { user: req.user, stats: getLiveStats(), statVisibility, pageTitle: 'Home' });
 });
 
 app.get('/api/stats', (req, res) => {
   const stats = getLiveStats();
   delete stats.install_id;
+  const s = settingsObj();
+  if (s.stat_show_users             === '0') delete stats.users;
+  if (s.stat_show_servers           === '0') delete stats.servers;
+  if (s.stat_show_paid_transactions === '0') delete stats.paid_transactions;
+  if (s.stat_show_free_servers      === '0') delete stats.free_servers;
+  if (s.stat_show_paid_servers      === '0') delete stats.paid_servers;
+  if (s.stat_show_admins            === '0') delete stats.admins;
+  if (s.stat_show_revenue           === '0') { delete stats.revenue_inr; delete stats.revenue_usd; }
   res.json({ ok: true, stats });
 });
 
@@ -181,7 +199,7 @@ app.get('/plans', (req, res) => {
 
 app.get('/api/plans', (req, res) => {
   const plans = db.prepare(`
-    SELECT key,name,price_inr,price_usd,memory,disk,cpu,databases,backups
+    SELECT key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports
     FROM plans WHERE active=1 ORDER BY price_inr ASC
   `).all();
   res.json({ ok: true, plans });
@@ -782,14 +800,14 @@ async function fulfillPaidTransaction(tx) {
   const cfg  = JSON.parse(tx.deploy_config||'{}');
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(tx.user_id);
   const s    = settingsObj();
-  const specs = { memory:plan.memory, disk:plan.disk, cpu:plan.cpu, databases:plan.databases, backups:plan.backups };
+  const specs = { memory:plan.memory, disk:plan.disk, cpu:plan.cpu, databases:plan.databases, backups:plan.backups, ports:plan.ports || 1 };
   const desc  = `Managed by ${s.dashboard_url||process.env.BASE_URL||'http://localhost:3000'}`;
   const result = await ptero.createServer({ panelUserId:user.pterodactyl_user_id, name:cfg.name, nestId:cfg.nest_id, eggId:cfg.egg_id, nodeId:cfg.node_id, specs, description:desc });
   const now = nowISO(), next = nextBillingDate();
   insertServer.run({
     user_id:user.id, pterodactyl_server_id:result.attributes.id, pterodactyl_identifier:result.attributes.identifier,
     name:cfg.name, description:desc, plan:plan.key, egg_id:cfg.egg_id, nest_id:cfg.nest_id, node_id:cfg.node_id,
-    ...specs, ports:1, subscription_active:1, subscription_gateway:tx.gateway, billing_cycle_start:now, billing_cycle_end:next
+    ...specs, subscription_active:1, subscription_gateway:tx.gateway, billing_cycle_start:now, billing_cycle_end:next
   });
   return db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
 }
@@ -869,6 +887,11 @@ app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
   for (const f of fields) if (req.body[f] !== undefined) setSetting(f, req.body[f]);
   // Checkbox: explicitly persist on/off (absent body field = unchecked)
   setSetting('hide_credit', req.body.hide_credit === '1' ? '1' : '0');
+  const statToggles = [
+    'stat_show_users','stat_show_servers','stat_show_paid_transactions',
+    'stat_show_free_servers','stat_show_paid_servers','stat_show_admins','stat_show_revenue'
+  ];
+  for (const t of statToggles) setSetting(t, req.body[t] === '1' ? '1' : '0');
   audit(req.user, 'settings.update', { type:'settings', id:'global', name:'Settings' }, { fields: fields.filter(f => req.body[f] !== undefined) }, req.ip);
   const dest = req.body.redirect === '/admin/apis' ? '/admin/apis' : '/admin';
   res.redirect(dest + '?success=Settings+updated.');
@@ -920,11 +943,15 @@ app.get('/admin/eggs', ensureAdmin, (req, res) => {
 app.post('/admin/servers/:id/specs', ensureAdmin, async (req, res) => {
   const server=getServerById.get(req.params.id);
   if (!server) return res.redirect('/admin/servers?error=Not+found.');
-  const specs={ memory:parseInt(req.body.memory,10), disk:parseInt(req.body.disk,10), cpu:parseInt(req.body.cpu,10), databases:parseInt(req.body.databases,10), backups:parseInt(req.body.backups,10) };
+  const specs={
+    memory:parseInt(req.body.memory,10), disk:parseInt(req.body.disk,10), cpu:parseInt(req.body.cpu,10),
+    ports:Math.max(1, parseInt(req.body.ports,10) || server.ports || 1),
+    databases:parseInt(req.body.databases,10), backups:parseInt(req.body.backups,10)
+  };
   try {
     await ptero.updateServerBuild(server.pterodactyl_server_id, specs);
-    db.prepare('UPDATE servers SET memory=?,disk=?,cpu=?,databases=?,backups=? WHERE id=?').run(specs.memory,specs.disk,specs.cpu,specs.databases,specs.backups,server.id);
-    audit(req.user, 'server.update_specs', { type:'server', id:server.id, name:server.name }, { before:{memory:server.memory,disk:server.disk,cpu:server.cpu}, after:specs }, req.ip);
+    db.prepare('UPDATE servers SET memory=?,disk=?,cpu=?,ports=?,databases=?,backups=? WHERE id=?').run(specs.memory,specs.disk,specs.cpu,specs.ports,specs.databases,specs.backups,server.id);
+    audit(req.user, 'server.update_specs', { type:'server', id:server.id, name:server.name }, { before:{memory:server.memory,disk:server.disk,cpu:server.cpu,ports:server.ports}, after:specs }, req.ip);
     res.redirect('/admin/servers?success=Specs+updated.');
   } catch(err) { res.redirect('/admin/servers?error=Failed+to+update+specs.'); }
 });
@@ -1032,32 +1059,32 @@ app.post('/admin/eggs/:id/delete', ensureAdmin, (req, res) => {
 // ── Admin: Plans ────────────────────────────────────────────────────────────
 
 app.post('/admin/plans/create', ensureAdmin, (req, res) => {
-  const {key,name,price_inr,price_usd,memory,disk,cpu,databases,backups}=req.body;
+  const {key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports}=req.body;
   if (!key||!name) return res.redirect('/admin/plans?error=Key+and+name+are+required.');
   try {
-    db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,active)
-      VALUES (?,?,?,?,?,?,?,?,?,1)`)
+    db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active)
+      VALUES (?,?,?,?,?,?,?,?,?,?,1)`)
       .run(key, name, parseInt(price_inr,10)||0, parseFloat(price_usd)||0,
           parseInt(memory,10)||0, parseInt(disk,10)||0, parseInt(cpu,10)||0,
-          parseInt(databases,10)||1, parseInt(backups,10)||1);
+          parseInt(databases,10)||1, parseInt(backups,10)||1, Math.max(1, parseInt(ports,10)||1));
     audit(req.user, 'plan.create', { type:'plan', id:key, name }, {}, req.ip);
     res.redirect('/admin/plans?success=' + encodeURIComponent(`Plan "${name}" created.`));
   } catch { res.redirect('/admin/plans?error=Plan+key+already+exists.'); }
 });
 
 app.post('/admin/plans/:key/update', ensureAdmin, (req, res) => {
-  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
-  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
-    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
+    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),Math.max(1,parseInt(ports,10)||1),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
 
 // Legacy route kept for backwards compat
 app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
-  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,active}=req.body;
-  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`)
-    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),active?1:0,req.params.key);
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
+    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),Math.max(1,parseInt(ports,10)||1),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
@@ -1067,14 +1094,14 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   const rows = req.body.plans || {};
   const keys = Object.keys(rows);
   if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
-  const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,active=? WHERE key=?`);
+  const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`);
   const saveAll = db.transaction((rows) => {
     for (const key of Object.keys(rows)) {
       const r = rows[key];
       stmt.run(
         r.name, parseInt(r.price_inr,10)||0, parseFloat(r.price_usd)||0,
         parseInt(r.memory,10)||0, parseInt(r.disk,10)||0, parseInt(r.cpu,10)||0,
-        parseInt(r.databases,10)||0, parseInt(r.backups,10)||0,
+        parseInt(r.databases,10)||0, parseInt(r.backups,10)||0, Math.max(1, parseInt(r.ports,10)||1),
         r.active ? 1 : 0, key
       );
     }
