@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS plans (
   cpu           INTEGER,
   databases     INTEGER DEFAULT 1,
   backups       INTEGER DEFAULT 1,
+  ports         INTEGER DEFAULT 1,
   active        INTEGER DEFAULT 1
 );
 
@@ -209,6 +210,7 @@ const migrations = [
   `ALTER TABLE users ADD COLUMN used_backups INTEGER DEFAULT 0`,
   `ALTER TABLE users ADD COLUMN last_daily_claim TEXT`,
   `ALTER TABLE users ADD COLUMN last_workink_claim TEXT`,
+  `ALTER TABLE plans ADD COLUMN ports INTEGER DEFAULT 1`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 
@@ -257,6 +259,14 @@ const defaultSettings = {
   queue_max_parallel:  '1',     // how many panel creates can run at once
   // Dashboard info
   dashboard_url:           'http://localhost:3000',
+  // Home page "Live Platform Stats" — per-stat visibility toggles
+  stat_show_users:            '1',
+  stat_show_servers:          '1',
+  stat_show_paid_transactions:'1',
+  stat_show_free_servers:     '1',
+  stat_show_paid_servers:     '1',
+  stat_show_admins:           '1',
+  stat_show_revenue:          '1',
 };
 const ins = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k,v] of Object.entries(defaultSettings)) ins.run(k, v);
@@ -287,12 +297,12 @@ insItem.run({ key:'coins_100', name:'100 Coins',     description:'Buy 100 coins 
 const plansSeededFlag = db.prepare('SELECT value FROM settings WHERE key=?').get('default_plans_seeded');
 if (!plansSeededFlag) {
   const insPlan = db.prepare(`
-    INSERT OR IGNORE INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,active)
-    VALUES (@key,@name,@price_inr,@price_usd,@memory,@disk,@cpu,@databases,@backups,@active)
+    INSERT OR IGNORE INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active)
+    VALUES (@key,@name,@price_inr,@price_usd,@memory,@disk,@cpu,@databases,@backups,@ports,@active)
   `);
-  insPlan.run({ key:'basic', name:'Basic', price_inr:9900,  price_usd:1.5, memory:2048, disk:5120,  cpu:150, databases:2, backups:2, active:1 });
-  insPlan.run({ key:'pro',   name:'Pro',   price_inr:24900, price_usd:3.5, memory:4096, disk:10240, cpu:200, databases:3, backups:3, active:1 });
-  insPlan.run({ key:'ultra', name:'Ultra', price_inr:49900, price_usd:7,   memory:8192, disk:20480, cpu:300, databases:5, backups:5, active:1 });
+  insPlan.run({ key:'basic', name:'Basic', price_inr:9900,  price_usd:1.5, memory:2048, disk:5120,  cpu:150, databases:2, backups:2, ports:1, active:1 });
+  insPlan.run({ key:'pro',   name:'Pro',   price_inr:24900, price_usd:3.5, memory:4096, disk:10240, cpu:200, databases:3, backups:3, ports:2, active:1 });
+  insPlan.run({ key:'ultra', name:'Ultra', price_inr:49900, price_usd:7,   memory:8192, disk:20480, cpu:300, databases:5, backups:5, ports:3, active:1 });
   db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)').run('default_plans_seeded', '1');
 }
 
