@@ -118,6 +118,10 @@
           <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
             <%- icon('globe', 'h-4 w-4 text-zinc-400') %>
             <p class="text-sm font-semibold text-white">General & Branding</p>
+            <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+              <%= settings.hide_credit === '1' ? 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' : 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' %>">
+              Dashboard Credit: <%= settings.hide_credit === '1' ? 'Hidden' : 'Shown' %>
+            </span>
           </div>
           <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -134,6 +138,18 @@
               <label class="block text-xs text-zinc-500 mb-1">Dashboard URL <span class="text-zinc-600">(used in server description)</span></label>
               <input type="text" name="dashboard_url" value="<%= settings.dashboard_url || '' %>" placeholder="https://your-domain.com"
                 class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="flex items-center gap-x-3 cursor-pointer select-none">
+                <div class="relative">
+                  <input type="checkbox" name="hide_credit" value="1" id="hideCreditToggle"
+                    <%= settings.hide_credit === '1' ? 'checked' : '' %>
+                    class="sr-only peer">
+                  <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+                  <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                </div>
+                <span class="text-sm text-zinc-300">Dashboard Credit <span class="text-zinc-600">— disable to hide FusionDash promo/GitHub links; homepage "View source" becomes "View Plans" (<a href="/plans" target="_blank" class="text-blue-400 hover:underline">/plans</a>)</span></span>
+              </label>
             </div>
           </div>
         </div>
@@ -341,36 +357,43 @@
 
     <!-- ── PLANS ──────────────────────────────────────────── -->
     <div id="tab-plans" class="tab-panel hidden space-y-4">
-      <% plans.forEach(plan => { %>
-      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
-        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
-          <p class="text-sm font-semibold text-white capitalize"><%= plan.name %></p>
-          <code class="text-xs text-zinc-500 ml-1"><%= plan.key %></code>
-          <span class="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-            <%= plan.active ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
-            <%= plan.active ? 'Active' : 'Inactive' %>
-          </span>
-        </div>
-        <form action="/admin/plans/<%= plan.key %>" method="POST" class="p-5">
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-            <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
-            <div>
-              <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
-              <input type="<%= t %>" name="<%= k %>" value="<%= plan[k] %>"
-                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
-            </div>
-            <% }) %>
+      <form action="/admin/plans/bulk-update" method="POST" class="space-y-4">
+        <% plans.forEach(plan => { %>
+        <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+          <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+            <p class="text-sm font-semibold text-white capitalize"><%= plan.name %></p>
+            <code class="text-xs text-zinc-500 ml-1"><%= plan.key %></code>
+            <span class="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+              <%= plan.active ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
+              <%= plan.active ? 'Active' : 'Inactive' %>
+            </span>
           </div>
-          <div class="flex items-center gap-x-4">
-            <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer select-none">
-              <input type="checkbox" name="active" <%= plan.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
+          <div class="p-5">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
+              <div>
+                <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+                <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= plan[k] %>"
+                  class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+              </div>
+              <% }) %>
+            </div>
+            <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer select-none w-fit">
+              <input type="checkbox" name="plans[<%= plan.key %>][active]" <%= plan.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
               Active
             </label>
-            <button type="submit" class="rounded-full bg-blue-500/15 px-5 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">Save</button>
           </div>
-        </form>
-      </div>
-      <% }) %>
+        </div>
+        <% }) %>
+
+        <% if (plans.length) { %>
+        <div class="sticky bottom-4 flex justify-end">
+          <button type="submit" class="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition-colors">
+            Save Changes
+          </button>
+        </div>
+        <% } %>
+      </form>
     </div>
 
     <!-- ── STORE ITEMS ────────────────────────────────────── -->
@@ -398,34 +421,41 @@
         </form>
       </div>
 
-      <% storeItems.forEach(item => { %>
-      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
-        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
-          <p class="text-sm font-semibold text-white"><%= item.name %></p>
-          <code class="text-xs text-zinc-600 ml-1"><%= item.key %></code>
-          <span class="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-            <%= item.active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-500' %>">
-            <%= item.active ? 'Active' : 'Inactive' %>
-          </span>
-        </div>
-        <form action="/admin/store/<%= item.key %>" method="POST" class="p-5">
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-            <div><label class="block text-xs text-zinc-500 mb-1">Name</label><input type="text" name="name" value="<%= item.name %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
-            <div><label class="block text-xs text-zinc-500 mb-1">Description</label><input type="text" name="description" value="<%= item.description %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
-            <div><label class="block text-xs text-zinc-500 mb-1">Resource</label><input type="text" name="resource" value="<%= item.resource %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
-            <div><label class="block text-xs text-zinc-500 mb-1">Amount</label><input type="number" name="amount" value="<%= item.amount %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
-            <div><label class="block text-xs text-zinc-500 mb-1">Cost (coins)</label><input type="number" name="cost" value="<%= item.cost %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+      <form action="/admin/store/bulk-update" method="POST" class="space-y-4">
+        <% storeItems.forEach(item => { %>
+        <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+          <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+            <p class="text-sm font-semibold text-white"><%= item.name %></p>
+            <code class="text-xs text-zinc-600 ml-1"><%= item.key %></code>
+            <span class="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+              <%= item.active ? 'bg-green-500/10 text-green-400' : 'bg-zinc-500/10 text-zinc-500' %>">
+              <%= item.active ? 'Active' : 'Inactive' %>
+            </span>
           </div>
-          <div class="flex items-center gap-x-4">
-            <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer select-none">
-              <input type="checkbox" name="active" <%= item.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
+          <div class="p-5">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+              <div><label class="block text-xs text-zinc-500 mb-1">Name</label><input type="text" name="items[<%= item.key %>][name]" value="<%= item.name %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+              <div><label class="block text-xs text-zinc-500 mb-1">Description</label><input type="text" name="items[<%= item.key %>][description]" value="<%= item.description %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+              <div><label class="block text-xs text-zinc-500 mb-1">Resource</label><input type="text" name="items[<%= item.key %>][resource]" value="<%= item.resource %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+              <div><label class="block text-xs text-zinc-500 mb-1">Amount</label><input type="number" name="items[<%= item.key %>][amount]" value="<%= item.amount %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+              <div><label class="block text-xs text-zinc-500 mb-1">Cost (coins)</label><input type="number" name="items[<%= item.key %>][cost]" value="<%= item.cost %>" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm"></div>
+            </div>
+            <label class="flex items-center gap-x-2 text-sm text-zinc-400 cursor-pointer select-none w-fit">
+              <input type="checkbox" name="items[<%= item.key %>][active]" <%= item.active ? 'checked' : '' %> class="rounded bg-zinc-700 border-zinc-600 text-blue-400">
               Active
             </label>
-            <button type="submit" class="rounded-full bg-blue-500/15 px-5 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">Save</button>
           </div>
-        </form>
-      </div>
-      <% }) %>
+        </div>
+        <% }) %>
+
+        <% if (storeItems.length) { %>
+        <div class="sticky bottom-4 flex justify-end">
+          <button type="submit" class="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition-colors">
+            Save Changes
+          </button>
+        </div>
+        <% } %>
+      </form>
     </div>
 
     <!-- ── NODES ──────────────────────────────────────────── -->
