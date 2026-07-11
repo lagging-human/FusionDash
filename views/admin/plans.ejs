@@ -49,8 +49,8 @@
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
           </div>
           <div>
-            <label class="block text-xs text-zinc-500 mb-1">Price INR <span class="text-zinc-600">(paise)</span></label>
-            <input type="number" name="price_inr" placeholder="99900" value="0"
+            <label class="block text-xs text-zinc-500 mb-1">Price (₹)</label>
+            <input type="number" name="price_inr" placeholder="999" value="0" step="any"
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
           </div>
           <div>
@@ -120,12 +120,12 @@
         </div>
         <div class="p-5">
           <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
-            <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],
+            <% [['name','Name','text'],['price_inr','Price (₹)','number'],['price_usd','Price USD','number'],
                 ['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],
                 ['ports','Ports','number'],['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
             <div>
               <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
-              <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= plan[k] %>" <%= t==='number'?'step="any"':'' %> <%= k==='ports'?'min="1"':'' %>
+              <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= k==='price_inr' ? (plan[k]/100) : plan[k] %>" <%= t==='number'?'step="any"':'' %> <%= k==='ports'?'min="1"':'' %>
                 class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
             </div>
             <% }) %>
