@@ -97,50 +97,55 @@
     </div>
     <% } %>
 
-    <% plans.forEach(plan => { %>
-    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
-      <div class="flex flex-wrap items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
-        <p class="text-sm font-semibold text-white capitalize"><%= plan.name %></p>
-        <code class="text-xs text-zinc-500 bg-zinc-900 rounded px-2 py-0.5"><%= plan.key %></code>
-        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-          <%= plan.active ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
-          <%= plan.active ? 'Active' : 'Inactive' %>
-        </span>
-        <form action="/admin/plans/<%= plan.key %>/delete" method="POST" class="ml-auto"
-          onsubmit="return confirm('Delete plan <%= plan.name %>? This cannot be undone.')">
-          <button type="submit" class="rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/15 transition-colors">
+    <% if (plans.length) { %>
+    <form action="/admin/plans/bulk-update" method="POST" class="space-y-5 pb-16">
+      <% plans.forEach(plan => { %>
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex flex-wrap items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <p class="text-sm font-semibold text-white capitalize"><%= plan.name %></p>
+          <code class="text-xs text-zinc-500 bg-zinc-900 rounded px-2 py-0.5"><%= plan.key %></code>
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+            <%= plan.active ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
+            <%= plan.active ? 'Active' : 'Inactive' %>
+          </span>
+          <button type="submit" formaction="/admin/plans/<%= plan.key %>/delete" formnovalidate class="ml-auto rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/15 transition-colors"
+            onclick="return confirm('Delete plan <%= plan.name %>? This cannot be undone.')">
             Delete
           </button>
-        </form>
-      </div>
-      <form action="/admin/plans/<%= plan.key %>/update" method="POST" class="p-5">
-        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
-          <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],
-              ['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],
-              ['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
-            <input type="<%= t %>" name="<%= k %>" value="<%= plan[k] %>" <%= t==='number'?'step="any"':'' %>
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
-          </div>
-          <% }) %>
         </div>
-        <div class="flex items-center gap-x-4">
-          <label class="flex items-center gap-x-3 cursor-pointer select-none">
+        <div class="p-5">
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
+            <% [['name','Name','text'],['price_inr','Price INR (paise)','number'],['price_usd','Price USD','number'],
+                ['memory','RAM (MB)','number'],['disk','Disk (MB)','number'],['cpu','CPU (%)','number'],
+                ['databases','Databases','number'],['backups','Backups','number']].forEach(([k,l,t]) => { %>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
+              <input type="<%= t %>" name="plans[<%= plan.key %>][<%= k %>]" value="<%= plan[k] %>" <%= t==='number'?'step="any"':'' %>
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm">
+            </div>
+            <% }) %>
+          </div>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
             <div class="relative">
-              <input type="checkbox" name="active" <%= plan.active ? 'checked' : '' %> class="sr-only peer">
+              <input type="checkbox" name="plans[<%= plan.key %>][active]" <%= plan.active ? 'checked' : '' %> class="sr-only peer">
               <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
               <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
             </div>
             <span class="text-sm text-zinc-300">Active</span>
           </label>
-          <button type="submit" class="rounded-full bg-blue-500/15 px-5 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        </div>
+      </div>
+      <% }) %>
+
+      <div class="fixed bottom-0 inset-x-0 z-20">
+        <div class="px-4 sm:px-6 lg:px-8 py-3 bg-zinc-950/95 backdrop-blur border-t border-white/[0.06] flex justify-end">
+          <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
             Save Changes
           </button>
         </div>
-      </form>
-    </div>
-    <% }) %>
+      </div>
+    </form>
+    <% } %>
 
   </div>
 </div>
