@@ -47,11 +47,11 @@
         </form>
       </div>
       <form action="/admin/servers/<%= server.id %>/specs" method="POST" class="p-5">
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
-          <% [['memory','RAM (MB)'],['disk','Disk (MB)'],['cpu','CPU (%)'],['databases','DBs'],['backups','Backups']].forEach(([k,l]) => { %>
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-3">
+          <% [['memory','RAM (MB)'],['disk','Disk (MB)'],['cpu','CPU (%)'],['ports','Ports'],['databases','DBs'],['backups','Backups']].forEach(([k,l]) => { %>
           <div>
             <label class="block text-xs text-zinc-500 mb-1"><%= l %></label>
-            <input type="number" name="<%= k %>" value="<%= server[k] %>"
+            <input type="number" name="<%= k %>" value="<%= server[k] %>" min="<%= k==='ports'?1:0 %>"
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 text-sm">
           </div>
           <% }) %>
