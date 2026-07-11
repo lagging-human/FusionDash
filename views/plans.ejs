@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<%- include('./components/header') %>
+<body>
+  <div class="min-h-screen flex flex-col">
+
+    <!-- Nav -->
+    <nav class="flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+      <a href="/" class="flex items-center gap-x-2.5">
+        <% if (appFavicon) { %>
+          <img src="<%= appFavicon %>" class="h-7 w-7 rounded-lg object-cover" alt="">
+        <% } else { %>
+          <div class="h-7 w-7 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <span class="text-xs font-bold text-blue-400"><%= appName ? appName[0].toUpperCase() : 'F' %></span>
+          </div>
+        <% } %>
+        <span class="text-sm font-semibold text-white"><%= appName %></span>
+      </a>
+      <div class="flex items-center gap-x-3">
+        <a href="/"
+          class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+          Home
+        </a>
+        <a href="<%= user ? '/dashboard' : '/login' %>"
+          class="rounded-full bg-blue-500/15 px-4 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+          <%= user ? 'Dashboard' : 'Sign in' %>
+        </a>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="px-4 pt-16 pb-10 text-center">
+      <h1 class="text-3xl sm:text-4xl font-bold text-white">Plans &amp; Pricing</h1>
+      <p class="mt-3 text-sm text-zinc-400 max-w-xl mx-auto">
+        Pick a plan that fits your server. Upgrade or downgrade any time.
+      </p>
+    </div>
+
+    <!-- Plans grid -->
+    <div class="flex-1 px-4 pb-20">
+      <% if (!plans.length) { %>
+      <div class="max-w-md mx-auto rounded-2xl border border-dashed border-white/10 py-12 text-center">
+        <p class="text-sm text-zinc-500">No plans are available right now. Check back soon.</p>
+      </div>
+      <% } else { %>
+      <div class="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <% plans.forEach((plan, i) => { %>
+        <div class="rounded-2xl border <%= i === 1 ? 'border-blue-500/40 bg-blue-500/[0.04]' : 'border-white/[0.06] bg-white/[0.02]' %> p-6 flex flex-col">
+          <p class="text-sm font-semibold text-white capitalize"><%= plan.name %></p>
+          <div class="mt-3 flex items-baseline gap-x-1">
+            <span class="text-3xl font-bold text-white">$<%= plan.price_usd %></span>
+            <span class="text-xs text-zinc-500">/ mo</span>
+          </div>
+          <p class="text-xs text-zinc-600 mt-0.5">₹<%= (plan.price_inr/100).toFixed(2) %></p>
+
+          <ul class="mt-5 space-y-2.5 text-sm text-zinc-300 flex-1">
+            <li class="flex items-center gap-x-2">
+              <%- icon('gift', 'h-4 w-4 text-blue-400 shrink-0') %>
+              <%= plan.memory %> MB RAM
+            </li>
+            <li class="flex items-center gap-x-2">
+              <%- icon('server', 'h-4 w-4 text-blue-400 shrink-0') %>
+              <%= plan.disk %> MB Disk
+            </li>
+            <li class="flex items-center gap-x-2">
+              <%- icon('refresh', 'h-4 w-4 text-blue-400 shrink-0') %>
+              <%= plan.cpu %>% CPU
+            </li>
+            <li class="flex items-center gap-x-2">
+              <%- icon('database', 'h-4 w-4 text-blue-400 shrink-0') %>
+              <%= plan.databases %> Databases
+            </li>
+            <li class="flex items-center gap-x-2">
+              <%- icon('list', 'h-4 w-4 text-blue-400 shrink-0') %>
+              <%= plan.backups %> Backups
+            </li>
+          </ul>
+
+          <a href="<%= user ? '/store' : '/login' %>"
+            class="mt-6 block text-center rounded-full <%= i === 1 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-white/[0.06] hover:bg-white/10 text-zinc-200 ring-1 ring-inset ring-white/10' %> px-4 py-2.5 text-sm font-semibold transition-colors">
+            <%= user ? 'Choose plan' : 'Sign in to choose' %>
+          </a>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/[0.06] px-6 py-4 flex flex-wrap items-center justify-between gap-2">
+      <% if (!hideCredit) { %>
+      <p class="text-xs text-zinc-600">
+        Built with
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank"
+          class="text-zinc-500 hover:text-zinc-300 transition-colors">FusionDash</a>
+        — open source Pterodactyl billing dashboard.
+      </p>
+      <% } else { %>
+      <span></span>
+      <% } %>
+      <p class="text-xs text-zinc-700">
+        v<%= appVersion %>
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>
