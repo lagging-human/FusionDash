@@ -1097,17 +1097,9 @@ app.post('/admin/plans/:key/update', ensureAdmin, (req, res) => {
   res.redirect('/admin/plans?success=Plan+updated.');
 });
 
-// Legacy route kept for backwards compat
-app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
-  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
-  const existing = db.prepare('SELECT ports FROM plans WHERE key=?').get(req.params.key);
-  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
-    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
-  audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
-  res.redirect('/admin/plans?success=Plan+updated.');
-});
-
 // Bulk-save every plan row at once from the admin Plans tab ("Save Changes" button)
+// NOTE: must be registered before the "/admin/plans/:key" wildcard route below,
+// otherwise Express matches ":key" against the literal string "bulk-update" first.
 app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   console.log('[PLANS BODY]', JSON.stringify(req.body.plans, null, 2)); // TEMP DEBUG
   const rows = req.body.plans || {};
@@ -1132,6 +1124,16 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   saveAll(rows);
   audit(req.user, 'plan.bulk_update', { type:'plan', id:'bulk', name:'Plans' }, { keys }, req.ip);
   res.redirect('/admin/plans?success=' + encodeURIComponent(`Saved ${keys.length} plan(s).`));
+});
+
+// Legacy route kept for backwards compat
+app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
+  const existing = db.prepare('SELECT ports FROM plans WHERE key=?').get(req.params.key);
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
+    .run(name,parseInt(price_inr,10),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
+  audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
+  res.redirect('/admin/plans?success=Plan+updated.');
 });
 
 app.post('/admin/plans/:key/delete', ensureAdmin, (req, res) => {
