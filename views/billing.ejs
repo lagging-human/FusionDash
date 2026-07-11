@@ -92,9 +92,9 @@
             <td class="py-3.5 pr-6 hidden lg:table-cell">
               <div class="flex flex-wrap gap-x-2 text-xs text-zinc-500">
                 <span><%= (server.memory/1024).toFixed(1) %> GiB RAM</span>
-                <span class="text-zinc-700">·</span>
+                <span class="text-zinc-700">Â·</span>
                 <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
-                <span class="text-zinc-700">·</span>
+                <span class="text-zinc-700">Â·</span>
                 <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
               </div>
             </td>
@@ -112,7 +112,7 @@
                   <% if (daysLeft !== null) { %><span class="text-[10px] text-amber-500/70">Ends in <%= daysLeft %>d</span><% } %>
                 </div>
               <% } else { %>
-                <span class="text-xs text-zinc-600">—</span>
+                <span class="text-xs text-zinc-600">â€”</span>
               <% } %>
             </td>
             <td class="py-3.5 pr-4 text-right">
@@ -162,9 +162,9 @@
           <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
         </div>
         <% if (subStatus === 'active' && daysLeft !== null) { %>
-        <p class="text-xs text-green-400 mb-2">Active · renews in <%= daysLeft %>d</p>
+        <p class="text-xs text-green-400 mb-2">Active Â· renews in <%= daysLeft %>d</p>
         <% } else if (subStatus === 'cancelled' && daysLeft !== null) { %>
-        <p class="text-xs text-amber-400 mb-2">Cancelled · ends in <%= daysLeft %>d</p>
+        <p class="text-xs text-amber-400 mb-2">Cancelled Â· ends in <%= daysLeft %>d</p>
         <% } %>
         <div class="flex items-center gap-x-2">
           <% if (subStatus === 'active') { %>
@@ -209,10 +209,11 @@
           <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
           <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
           <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
+          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.ports || 1 %> Port<%= (plan.ports||1) !== 1 ? 's' : '' %></li>
         </ul>
         <div class="flex items-end justify-between">
           <div>
-            <p class="text-xl font-bold text-white">₹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
+            <p class="text-xl font-bold text-white">â‚¹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
             <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
           </div>
           <div class="flex flex-col gap-y-1.5">
