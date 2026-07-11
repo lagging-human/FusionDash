@@ -1193,20 +1193,30 @@ app.get('/admin/nodes', ensureAdmin, async (req, res) => {
   });
 });
 
-app.post('/admin/nodes/:id/update', ensureAdmin, (req, res) => {
-  const nodeId = parseInt(req.params.id, 10);
-  const state      = req.body.state;
-  const maxServers = parseInt(req.body.max_servers, 10) || 0;
+app.post('/admin/nodes/update-all', ensureAdmin, (req, res) => {
   const validStates = ['active', 'full', 'down', 'premium'];
-  if (!validStates.includes(state)) return res.redirect('/admin/nodes?error=Invalid+state.');
+  const nodeIds = (req.body.node_ids || '').split(',').map(s => parseInt(s, 10)).filter(Boolean);
+  if (!nodeIds.length) return res.redirect('/admin/nodes?error=No+nodes+to+update.');
 
-  const node = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(nodeId);
-  if (!node) return res.redirect('/admin/nodes?error=Node+not+found.');
+  const updateStmt = db.prepare(`UPDATE nodes SET state=?, max_servers=?, updated_at=datetime('now') WHERE panel_node_id=?`);
+  let updated = 0;
+  const applyAll = db.transaction(() => {
+    for (const nodeId of nodeIds) {
+      const state      = req.body['state_' + nodeId];
+      const maxServers = parseInt(req.body['max_servers_' + nodeId], 10) || 0;
+      if (!validStates.includes(state)) continue;
 
-  db.prepare(`UPDATE nodes SET state=?, max_servers=?, updated_at=datetime('now') WHERE panel_node_id=?`)
-    .run(state, maxServers, nodeId);
-  audit(req.user, 'node.update', { type:'node', id:String(nodeId), name:node.name }, { state, max_servers:maxServers }, req.ip);
-  res.redirect('/admin/nodes?success=' + encodeURIComponent(`Node "${node.name}" updated.`));
+      const node = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(nodeId);
+      if (!node) continue;
+
+      updateStmt.run(state, maxServers, nodeId);
+      audit(req.user, 'node.update', { type:'node', id:String(nodeId), name:node.name }, { state, max_servers:maxServers }, req.ip);
+      updated++;
+    }
+  });
+  applyAll();
+
+  res.redirect('/admin/nodes?success=' + encodeURIComponent(`Updated ${updated} node(s).`));
 });
 
 // Queue status for the current user (called via JS polling on dashboard)
