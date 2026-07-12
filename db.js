@@ -211,6 +211,9 @@ const migrations = [
   `ALTER TABLE users ADD COLUMN last_daily_claim TEXT`,
   `ALTER TABLE users ADD COLUMN last_workink_claim TEXT`,
   `ALTER TABLE plans ADD COLUMN ports INTEGER DEFAULT 1`,
+  `ALTER TABLE nodes ADD COLUMN location TEXT DEFAULT ''`,
+  `ALTER TABLE nodes ADD COLUMN public_port INTEGER DEFAULT 0`,
+  `ALTER TABLE plans ADD COLUMN available_node_ids TEXT DEFAULT '[]'`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 
