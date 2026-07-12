@@ -239,6 +239,8 @@ app.get('/api/plans/:type', (req, res) => {
   const plans = rows.map(p => ({
     slug: p.key,
     name: p.name,
+    price: Number(p.price_usd) || 0,   // consumer template does plan.price.toFixed(2)
+    period: 'month',                    // FusionDash bills on a flat renewal cycle, no per-plan period yet
     price_inr: p.price_inr,
     price_usd: p.price_usd,
     memory: p.memory,
