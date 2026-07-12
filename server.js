@@ -216,6 +216,55 @@ app.get('/api/plans', (req, res) => {
   res.json({ ok: true, plans });
 });
 
+// External integration API (e.g. a separate storefront/status site pulling
+// live plan+node data). Auth is optional: set EXTERNAL_API_KEY in .env to
+// require `Authorization: Bearer <key>`; leave unset to keep these open.
+// NOTE: unlike the rest of FusionDash's API, these two return bare JSON
+// arrays (no {ok,...} wrapper) — that's the shape the consuming site expects.
+function checkExternalApiKey(req, res) {
+  const configured = process.env.EXTERNAL_API_KEY;
+  if (!configured) return true;
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token !== configured) { res.status(401).json({ ok:false, error:'Unauthorized' }); return false; }
+  return true;
+}
+
+app.get('/api/plans/:type', (req, res) => {
+  if (!checkExternalApiKey(req, res)) return;
+  // FusionDash only manages Minecraft/Pterodactyl hosting today, so any other
+  // requested type genuinely has zero plans rather than falling back to stale data.
+  if (req.params.type !== 'minecraft') return res.json([]);
+  const rows = db.prepare('SELECT * FROM plans WHERE active=1 ORDER BY price_inr ASC').all();
+  const plans = rows.map(p => ({
+    slug: p.key,
+    name: p.name,
+    price_inr: p.price_inr,
+    price_usd: p.price_usd,
+    memory: p.memory,
+    disk: p.disk,
+    cpu: p.cpu,
+    databases: p.databases,
+    backups: p.backups,
+    ports: p.ports,
+    availability: (() => { try { return JSON.parse(p.available_node_ids || '[]'); } catch { return []; } })(),
+  }));
+  res.json(plans);
+});
+
+app.get('/api/nodes', (req, res) => {
+  if (!checkExternalApiKey(req, res)) return;
+  const rows = db.prepare(`SELECT * FROM nodes WHERE state != 'down' ORDER BY panel_node_id`).all();
+  const nodes = rows.map(n => ({
+    id: n.panel_node_id,
+    name: n.name,
+    location: n.location || '',
+    ip: n.fqdn,
+    port: n.public_port || null,
+  }));
+  res.json(nodes);
+});
+
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
   res.render('login', { error: req.query.error || null, pageTitle: 'Login' });
@@ -1088,25 +1137,38 @@ function rupeesToPaise(raw, fallback = 0) {
   return Number.isFinite(fb) && fb >= 0 ? Math.round(fb) : 0;
 }
 
+// The node-picker checkboxes only submit a name when checked, so "nothing
+// checked" is indistinguishable from "the picker section wasn't on the page
+// at all" (e.g. the local nodes table was empty on render). The hidden
+// `nodesPresent` marker always submits when the section rendered, so we only
+// touch available_node_ids when we know that's a real, deliberate selection —
+// otherwise we preserve whatever was already stored.
+function resolveNodeIds(nodesPresent, rawNodeIds, fallbackJson) {
+  if (!nodesPresent) return fallbackJson || '[]';
+  const arr = Array.isArray(rawNodeIds) ? rawNodeIds : (rawNodeIds ? [rawNodeIds] : []);
+  const ids = arr.map(id => parseInt(id, 10)).filter(Number.isFinite);
+  return JSON.stringify(ids);
+}
+
 app.post('/admin/plans/create', ensureAdmin, (req, res) => {
   const {key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports}=req.body;
   if (!key||!name) return res.redirect('/admin/plans?error=Key+and+name+are+required.');
   try {
-    db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active)
-      VALUES (?,?,?,?,?,?,?,?,?,?,1)`)
+    db.prepare(`INSERT INTO plans (key,name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,available_node_ids,active)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`)
       .run(key, name, rupeesToPaise(price_inr, 0), parseFloat(price_usd)||0,
           parseInt(memory,10)||0, parseInt(disk,10)||0, parseInt(cpu,10)||0,
-          parseInt(databases,10)||1, parseInt(backups,10)||1, resolvePorts(ports, 1));
+          parseInt(databases,10)||1, parseInt(backups,10)||1, resolvePorts(ports, 1), '[]');
     audit(req.user, 'plan.create', { type:'plan', id:key, name }, {}, req.ip);
-    res.redirect('/admin/plans?success=' + encodeURIComponent(`Plan "${name}" created.`));
+    res.redirect('/admin/plans?success=' + encodeURIComponent(`Plan "${name}" created. Pick its available nodes below.`));
   } catch { res.redirect('/admin/plans?error=Plan+key+already+exists.'); }
 });
 
 app.post('/admin/plans/:key/update', ensureAdmin, (req, res) => {
-  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
-  const existing = db.prepare('SELECT ports, price_inr FROM plans WHERE key=?').get(req.params.key);
-  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
-    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active,nodeIds,nodesPresent}=req.body;
+  const existing = db.prepare('SELECT ports, price_inr, available_node_ids FROM plans WHERE key=?').get(req.params.key);
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,available_node_ids=?,active=? WHERE key=?`)
+    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),resolveNodeIds(nodesPresent, nodeIds, existing?.available_node_ids),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
@@ -1119,10 +1181,10 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
   const keys = Object.keys(rows);
   if (!keys.length) return res.redirect('/admin/plans?error=No+plans+to+save.');
   const existingPlans = new Map(
-    db.prepare(`SELECT key, ports, price_inr FROM plans WHERE key IN (${keys.map(()=>'?').join(',')})`).all(...keys)
+    db.prepare(`SELECT key, ports, price_inr, available_node_ids FROM plans WHERE key IN (${keys.map(()=>'?').join(',')})`).all(...keys)
       .map(p => [p.key, p])
   );
-  const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`);
+  const stmt = db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,available_node_ids=?,active=? WHERE key=?`);
   const saveAll = db.transaction((rows) => {
     for (const key of Object.keys(rows)) {
       const r = rows[key];
@@ -1131,6 +1193,7 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
         r.name, rupeesToPaise(r.price_inr, existing?.price_inr), parseFloat(r.price_usd)||0,
         parseInt(r.memory,10)||0, parseInt(r.disk,10)||0, parseInt(r.cpu,10)||0,
         parseInt(r.databases,10)||0, parseInt(r.backups,10)||0, resolvePorts(r.ports, existing?.ports),
+        resolveNodeIds(r.nodesPresent, r.nodeIds, existing?.available_node_ids),
         r.active ? 1 : 0, key
       );
     }
@@ -1142,10 +1205,10 @@ app.post('/admin/plans/bulk-update', ensureAdmin, (req, res) => {
 
 // Legacy route kept for backwards compat
 app.post('/admin/plans/:key', ensureAdmin, (req, res) => {
-  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active}=req.body;
-  const existing = db.prepare('SELECT ports, price_inr FROM plans WHERE key=?').get(req.params.key);
-  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,active=? WHERE key=?`)
-    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),active?1:0,req.params.key);
+  const {name,price_inr,price_usd,memory,disk,cpu,databases,backups,ports,active,nodeIds,nodesPresent}=req.body;
+  const existing = db.prepare('SELECT ports, price_inr, available_node_ids FROM plans WHERE key=?').get(req.params.key);
+  db.prepare(`UPDATE plans SET name=?,price_inr=?,price_usd=?,memory=?,disk=?,cpu=?,databases=?,backups=?,ports=?,available_node_ids=?,active=? WHERE key=?`)
+    .run(name,rupeesToPaise(price_inr, existing?.price_inr),parseFloat(price_usd),parseInt(memory,10),parseInt(disk,10),parseInt(cpu,10),parseInt(databases,10),parseInt(backups,10),resolvePorts(ports, existing?.ports),resolveNodeIds(nodesPresent, nodeIds, existing?.available_node_ids),active?1:0,req.params.key);
   audit(req.user, 'plan.update', { type:'plan', id:req.params.key, name }, {}, req.ip);
   res.redirect('/admin/plans?success=Plan+updated.');
 });
@@ -1165,6 +1228,7 @@ app.get('/admin/plans', ensureAdmin, (req, res) => {
   res.render('admin/plans', {
     user: req.user,
     plans: db.prepare('SELECT * FROM plans').all(),
+    nodes: db.prepare('SELECT * FROM nodes ORDER BY panel_node_id').all(),
     pageTitle: 'Admin — Plans',
     error: req.query.error||null, success: req.query.success||null
   });
@@ -1394,19 +1458,21 @@ app.post('/admin/nodes/update-all', ensureAdmin, (req, res) => {
   const nodeIds = (req.body.node_ids || '').split(',').map(s => parseInt(s, 10)).filter(Boolean);
   if (!nodeIds.length) return res.redirect('/admin/nodes?error=No+nodes+to+update.');
 
-  const updateStmt = db.prepare(`UPDATE nodes SET state=?, max_servers=?, updated_at=datetime('now') WHERE panel_node_id=?`);
+  const updateStmt = db.prepare(`UPDATE nodes SET state=?, max_servers=?, location=?, public_port=?, updated_at=datetime('now') WHERE panel_node_id=?`);
   let updated = 0;
   const applyAll = db.transaction(() => {
     for (const nodeId of nodeIds) {
       const state      = req.body['state_' + nodeId];
       const maxServers = parseInt(req.body['max_servers_' + nodeId], 10) || 0;
+      const location   = (req.body['location_' + nodeId] || '').trim();
+      const publicPort = parseInt(req.body['public_port_' + nodeId], 10) || 0;
       if (!validStates.includes(state)) continue;
 
       const node = db.prepare('SELECT * FROM nodes WHERE panel_node_id=?').get(nodeId);
       if (!node) continue;
 
-      updateStmt.run(state, maxServers, nodeId);
-      audit(req.user, 'node.update', { type:'node', id:String(nodeId), name:node.name }, { state, max_servers:maxServers }, req.ip);
+      updateStmt.run(state, maxServers, location, publicPort, nodeId);
+      audit(req.user, 'node.update', { type:'node', id:String(nodeId), name:node.name }, { state, max_servers:maxServers, location, public_port:publicPort }, req.ip);
       updated++;
     }
   });
