@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/</span> <a href="/admin/themes" class="hover:text-zinc-300 transition-colors">Themes</a> <span class="text-zinc-700">/ <%= theme.name %></span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Edit Theme</p>
+    </div>
+    <a href="/admin/themes" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">&larr; Back to Themes</a>
+  </div>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-5 max-w-4xl">
+
+    <form action="/admin/themes/<%= theme.slug %>/update" method="POST" class="space-y-5">
+
+      <div>
+        <label class="block text-xs text-zinc-500 mb-1">Theme Name</label>
+        <input type="text" name="name" value="<%= theme.name %>" required
+          class="block w-full max-w-sm rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+      </div>
+
+      <!-- Colors -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('palette', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Colors</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Page Background</label>
+              <input type="color" name="pageBackground" value="<%= theme.palette.pageBackground %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Body Text</label>
+              <input type="color" name="bodyText" value="<%= theme.palette.bodyText %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500 mb-2">Neutral scale <span class="text-zinc-700">(950 = darkest panels &rarr; 300 = lightest text)</span></p>
+            <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              <% ['950','900','800','700','600','500','400','300'].forEach(s => { %>
+              <div>
+                <label class="block text-[10px] text-zinc-600 mb-1 text-center"><%= s %></label>
+                <input type="color" name="n<%= s %>" value="<%= theme.palette.neutral[s] %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+              </div>
+              <% }) %>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500 mb-2">Accent scale <span class="text-zinc-700">(buttons, links, focus rings)</span></p>
+            <div class="grid grid-cols-4 gap-2 max-w-xs">
+              <% ['300','400','500','600'].forEach(s => { %>
+              <div>
+                <label class="block text-[10px] text-zinc-600 mb-1 text-center"><%= s %></label>
+                <input type="color" name="a<%= s %>" value="<%= theme.palette.accent[s] %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+              </div>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typography -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('edit', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Typography</p>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Font Family <span class="text-zinc-700">(CSS value)</span></label>
+            <input type="text" name="fontFamily" value="<%= theme.typography.fontFamily %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Base Font Size</label>
+            <input type="text" name="baseFontSize" value="<%= theme.typography.baseFontSize %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs text-zinc-500 mb-1">Google Font URL <span class="text-zinc-700">(ignored if a custom font is uploaded below)</span></label>
+            <input type="text" name="googleFontUrl" value="<%= theme.typography.googleFontUrl || '' %>" placeholder="https://fonts.googleapis.com/css2?family=..."
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Layout -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('settings', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Layout</p>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Corner Roundness <span class="text-zinc-700" id="radiusVal"><%= theme.layout.radiusScale %>&times;</span></label>
+            <input type="range" name="radiusScale" min="0" max="2" step="0.1" value="<%= theme.layout.radiusScale %>"
+              oninput="document.getElementById('radiusVal').textContent = this.value + '\u00d7'"
+              class="block w-full">
+            <p class="text-[10px] text-zinc-700 mt-1">0 = sharp corners, 1 = default, 2 = extra rounded. Pills/avatars are unaffected.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Card Shadow <span class="text-zinc-700">(CSS box-shadow value)</span></label>
+            <input type="text" name="cardShadow" value="<%= theme.layout.cardShadow %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Animations -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('bolt', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Animations</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="animEnabled" <%= theme.animations.enabled ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Enable page-load animation</span>
+          </label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg">
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Style</label>
+              <select name="animStyle" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                <% ['fade','slide','none'].forEach(v => { %>
+                <option value="<%= v %>" <%= theme.animations.style===v?'selected':'' %>><%= v %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Speed</label>
+              <select name="animSpeed" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                <% ['0.1s','0.18s','0.3s','0.5s'].forEach(v => { %>
+                <option value="<%= v %>" <%= theme.animations.speed===v?'selected':'' %>><%= v %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="cardHover" <%= theme.animations.cardHover ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Cards lift on hover</span>
+          </label>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="buttonTransition" <%= theme.animations.buttonTransition ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Smooth transitions on buttons &amp; inputs</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Custom CSS -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('edit', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Custom CSS</p>
+        </div>
+        <div class="p-5">
+          <textarea name="customCss" rows="8" placeholder="/* Applied last — overrides everything above */"
+            class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono"><%= theme.customCss %></textarea>
+        </div>
+      </div>
+
+      <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        Save Theme
+      </button>
+    </form>
+
+    <!-- Images & custom font (separate multipart form) -->
+    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+      <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+        <%- icon('image', 'h-4 w-4 text-blue-400') %>
+        <p class="text-sm font-semibold text-white">Images &amp; Custom Font</p>
+      </div>
+      <form action="/admin/themes/<%= theme.slug %>/upload" method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Logo / Favicon</label>
+            <% if (theme.images.logoUrl) { %><img src="<%= theme.images.logoUrl %>" class="h-8 w-8 rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="logo" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Custom Font <span class="text-zinc-700">(.woff2/.woff/.ttf)</span></label>
+            <% if (theme.typography.fontSource === 'custom' && theme.typography.customFontUrl) { %><p class="text-[11px] text-green-400 mb-2">Active: uploaded font in use</p><% } %>
+            <input type="file" name="customFont" accept=".woff,.woff2,.ttf,.otf" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Login Background</label>
+            <% if (theme.images.loginBackgroundUrl) { %><img src="<%= theme.images.loginBackgroundUrl %>" class="h-16 w-full rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="loginBackground" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Sitewide Background</label>
+            <% if (theme.images.bodyBackgroundUrl) { %><img src="<%= theme.images.bodyBackgroundUrl %>" class="h-16 w-full rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="bodyBackground" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+        </div>
+        <button type="submit" class="rounded-full bg-zinc-500/10 px-5 py-2 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-500/20 hover:bg-zinc-500/20 transition-colors">
+          Upload
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

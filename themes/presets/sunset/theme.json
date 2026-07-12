@@ -1,0 +1,19 @@
+{
+  "name": "Sunset",
+  "palette": {
+    "pageBackground": "#120d09",
+    "bodyText": "#f1e4d5",
+    "neutral": { "950": "#120d09", "900": "#1f1712", "800": "#2e2119", "700": "#453324", "600": "#5c4632", "500": "#8a6e54", "400": "#b89b7c", "300": "#e0cbb0" },
+    "accent":  { "300": "#fdba74", "400": "#fb923c", "500": "#f97316", "600": "#ea580c" }
+  },
+  "typography": {
+    "fontFamily": "'Manrope', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 0.8, "cardShadow": "0 1px 2px rgba(0,0,0,.4)" },
+  "animations": { "enabled": true, "speed": "0.18s", "style": "fade", "cardHover": false, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

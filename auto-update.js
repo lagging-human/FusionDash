@@ -14,10 +14,50 @@ const fs    = require('fs');
 const REPO_API   = 'https://api.github.com/repos/lagging-human/FusionDash';
 const ROOT       = path.resolve(__dirname);
 const STAMP_FILE = path.join(ROOT, '.last_update_sha');
+const IGNORE_FILE = path.join(ROOT, '.fusionignore');
+const BACKUP_DIR  = path.join(require('os').tmpdir(), 'fusiondash-update-backup');
 const INTERVAL   = parseInt(process.env.AUTOUPDATE_INTERVAL_MINUTES || '30', 10) * 60 * 1000;
 const ENABLED    = process.env.AUTO_UPDATE !== 'false';
 
 function log(msg) { console.log(`[AutoUpdate] ${msg}`); }
+
+// ── .fusionignore: paths that must survive `git reset --hard` untouched ─────
+function readIgnoreList() {
+  try {
+    return fs.readFileSync(IGNORE_FILE, 'utf8')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'));
+  } catch { return []; }
+}
+
+function backupIgnoredPaths() {
+  const list = readIgnoreList();
+  if (!list.length) return [];
+  fs.rmSync(BACKUP_DIR, { recursive: true, force: true });
+  const kept = [];
+  for (const rel of list) {
+    const src = path.join(ROOT, rel);
+    if (!fs.existsSync(src)) continue;
+    const dest = path.join(BACKUP_DIR, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(src, dest, { recursive: true });
+    kept.push(rel);
+  }
+  return kept;
+}
+
+function restoreIgnoredPaths(list) {
+  for (const rel of list) {
+    const src = path.join(BACKUP_DIR, rel);
+    const dest = path.join(ROOT, rel);
+    if (!fs.existsSync(src)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(src, dest, { recursive: true });
+  }
+  fs.rmSync(BACKUP_DIR, { recursive: true, force: true });
+}
 
 function readLocalSha() {
   try { return fs.readFileSync(STAMP_FILE, 'utf8').trim(); } catch { return null; }
@@ -50,7 +90,16 @@ async function getLatestRelease() {
 function pullAndRestart() {
   log('Pulling latest changes…');
   try {
+    const protectedPaths = backupIgnoredPaths();
+    if (protectedPaths.length) log(`Protecting from .fusionignore: ${protectedPaths.join(', ')}`);
+
     execSync('git fetch --all && git reset --hard origin/main', { cwd: ROOT, stdio: 'inherit' });
+
+    if (protectedPaths.length) {
+      restoreIgnoredPaths(protectedPaths);
+      log('Restored protected paths.');
+    }
+
     execSync('npm install --production', { cwd: ROOT, stdio: 'inherit' });
     log('Update complete. Restarting…');
 

@@ -1,0 +1,19 @@
+{
+  "name": "Aurora",
+  "palette": {
+    "pageBackground": "#0a0a12",
+    "bodyText": "#e6e6f0",
+    "neutral": { "950": "#0a0a12", "900": "#161622", "800": "#232336", "700": "#34344a", "600": "#4a4a63", "500": "#6d6d87", "400": "#9d9db4", "300": "#cfcfe0" },
+    "accent":  { "300": "#c4b5fd", "400": "#a78bfa", "500": "#8b5cf6", "600": "#7c3aed" }
+  },
+  "typography": {
+    "fontFamily": "'Sora', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1.3, "cardShadow": "0 1px 2px rgba(0,0,0,.4)" },
+  "animations": { "enabled": true, "speed": "0.22s", "style": "slide", "cardHover": true, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Daylight",
+  "palette": {
+    "pageBackground": "#f4f4f5",
+    "bodyText": "#18181b",
+    "neutral": { "950": "#ffffff", "900": "#fbfbfc", "800": "#f1f1f3", "700": "#e0e0e4", "600": "#c9c9d0", "500": "#6b6b74", "400": "#45454c", "300": "#1f1f23" },
+    "accent":  { "300": "#bfdbfe", "400": "#60a5fa", "500": "#2563eb", "600": "#1d4ed8" }
+  },
+  "typography": {
+    "fontFamily": "'Space Grotesk', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1, "cardShadow": "0 1px 3px rgba(0,0,0,.08)" },
+  "animations": { "enabled": true, "speed": "0.18s", "style": "fade", "cardHover": false, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

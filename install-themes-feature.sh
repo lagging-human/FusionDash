@@ -1,3 +1,18 @@
+#!/usr/bin/env bash
+# Creates/overwrites every file for the Admin Themes feature.
+# Run this from your FusionDash project root (same folder as server.js).
+set -e
+
+mkdir -p "themes/presets/aurora"
+mkdir -p "themes/presets/daylight"
+mkdir -p "themes/presets/midnight"
+mkdir -p "themes/presets/sunset"
+mkdir -p "views"
+mkdir -p "views/admin"
+mkdir -p "views/components"
+
+echo "Writing server.js"
+cat > "server.js" << 'FUSIONDASH_EOF_SERVER_JS'
 require('dotenv').config();
 const express  = require('express');
 const session  = require('express-session');
@@ -1481,3 +1496,1084 @@ app.listen(PORT, async () => {
   startQueue();
   console.log('[queue] Server creation queue started');
 });
+FUSIONDASH_EOF_SERVER_JS
+
+echo "Writing auto-update.js"
+cat > "auto-update.js" << 'FUSIONDASH_EOF_AUTO-UPDATE_JS'
+/**
+ * auto-update.js
+ * Checks https://github.com/lagging-human/FusionDash for new releases/commits.
+ * If a newer version is found, pulls the latest changes and restarts via PM2
+ * (or plain process.exit so the process manager / nodemon restarts it).
+ *
+ * Runs on startup and then every AUTOUPDATE_INTERVAL_MINUTES (default 30 min).
+ */
+const { execSync, exec } = require('child_process');
+const axios = require('axios');
+const path  = require('path');
+const fs    = require('fs');
+
+const REPO_API   = 'https://api.github.com/repos/lagging-human/FusionDash';
+const ROOT       = path.resolve(__dirname);
+const STAMP_FILE = path.join(ROOT, '.last_update_sha');
+const IGNORE_FILE = path.join(ROOT, '.fusionignore');
+const BACKUP_DIR  = path.join(require('os').tmpdir(), 'fusiondash-update-backup');
+const INTERVAL   = parseInt(process.env.AUTOUPDATE_INTERVAL_MINUTES || '30', 10) * 60 * 1000;
+const ENABLED    = process.env.AUTO_UPDATE !== 'false';
+
+function log(msg) { console.log(`[AutoUpdate] ${msg}`); }
+
+// ── .fusionignore: paths that must survive `git reset --hard` untouched ─────
+function readIgnoreList() {
+  try {
+    return fs.readFileSync(IGNORE_FILE, 'utf8')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'));
+  } catch { return []; }
+}
+
+function backupIgnoredPaths() {
+  const list = readIgnoreList();
+  if (!list.length) return [];
+  fs.rmSync(BACKUP_DIR, { recursive: true, force: true });
+  const kept = [];
+  for (const rel of list) {
+    const src = path.join(ROOT, rel);
+    if (!fs.existsSync(src)) continue;
+    const dest = path.join(BACKUP_DIR, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(src, dest, { recursive: true });
+    kept.push(rel);
+  }
+  return kept;
+}
+
+function restoreIgnoredPaths(list) {
+  for (const rel of list) {
+    const src = path.join(BACKUP_DIR, rel);
+    const dest = path.join(ROOT, rel);
+    if (!fs.existsSync(src)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.rmSync(dest, { recursive: true, force: true });
+    fs.cpSync(src, dest, { recursive: true });
+  }
+  fs.rmSync(BACKUP_DIR, { recursive: true, force: true });
+}
+
+function readLocalSha() {
+  try { return fs.readFileSync(STAMP_FILE, 'utf8').trim(); } catch { return null; }
+}
+
+function writeLocalSha(sha) {
+  fs.writeFileSync(STAMP_FILE, sha, 'utf8');
+}
+
+function getGitHeadSha() {
+  try { return execSync('git rev-parse HEAD', { cwd: ROOT }).toString().trim(); } catch { return null; }
+}
+
+async function getLatestCommitSha() {
+  const res = await axios.get(`${REPO_API}/commits/main`, {
+    headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'FusionDash-Updater' }
+  });
+  return res.data.sha;
+}
+
+async function getLatestRelease() {
+  try {
+    const res = await axios.get(`${REPO_API}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'FusionDash-Updater' }
+    });
+    return res.data.tag_name || null;
+  } catch { return null; }
+}
+
+function pullAndRestart() {
+  log('Pulling latest changes…');
+  try {
+    const protectedPaths = backupIgnoredPaths();
+    if (protectedPaths.length) log(`Protecting from .fusionignore: ${protectedPaths.join(', ')}`);
+
+    execSync('git fetch --all && git reset --hard origin/main', { cwd: ROOT, stdio: 'inherit' });
+
+    if (protectedPaths.length) {
+      restoreIgnoredPaths(protectedPaths);
+      log('Restored protected paths.');
+    }
+
+    execSync('npm install --production', { cwd: ROOT, stdio: 'inherit' });
+    log('Update complete. Restarting…');
+
+    // Write the new sha so we don't re-update on the next check
+    const newSha = getGitHeadSha();
+    if (newSha) writeLocalSha(newSha);
+
+    // Prefer PM2 restart if available
+    exec('pm2 restart fusiondash 2>/dev/null || pm2 restart all 2>/dev/null', (err) => {
+      if (err) {
+        log('PM2 not available, using process.exit(0) — ensure a process manager restarts the app.');
+        process.exit(0);
+      }
+    });
+  } catch (err) {
+    log(`Update failed: ${err.message}`);
+  }
+}
+
+async function checkForUpdate() {
+  if (!ENABLED) return;
+  try {
+    const remoteSha  = await getLatestCommitSha();
+    const localSha   = readLocalSha() || getGitHeadSha();
+    const latestTag  = await getLatestRelease();
+
+    if (latestTag) log(`Latest release: ${latestTag}`);
+    log(`Remote SHA: ${remoteSha?.slice(0, 7)} | Local SHA: ${localSha?.slice(0, 7)}`);
+
+    if (!remoteSha) return;
+    if (localSha === remoteSha) { log('Already up to date.'); return; }
+
+    log(`New version detected (${remoteSha.slice(0, 7)}). Updating…`);
+    pullAndRestart();
+  } catch (err) {
+    log(`Update check failed: ${err.message}`);
+  }
+}
+
+function startAutoUpdater() {
+  if (!ENABLED) { log('Auto-update disabled (AUTO_UPDATE=false).'); return; }
+  log(`Auto-updater started. Checking every ${INTERVAL / 60000} min.`);
+  // Initial check after 10 seconds (let server finish booting first)
+  setTimeout(checkForUpdate, 10_000);
+  setInterval(checkForUpdate, INTERVAL);
+}
+
+module.exports = { startAutoUpdater, checkForUpdate };
+FUSIONDASH_EOF_AUTO-UPDATE_JS
+
+echo "Writing icons.js"
+cat > "icons.js" << 'FUSIONDASH_EOF_ICONS_JS'
+'use strict';
+
+// SVG icon map — strings only, no template literals or special chars that trip EJS
+const ICONS = {
+  coin:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 7.5c-.69-.414-1.58-.75-2.25-.75-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2c-.67 0-1.56-.336-2.25-.75M12 6v1.5m0 9V18"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>',
+  link:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>',
+  card:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 21Z"/></svg>',
+  bolt:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"/></svg>',
+  box:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"/></svg>',
+  database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>',
+  plug:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 20.25Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>',
+  disk:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m0 5.625c0 2.278 3.694 4.125 8.25 4.125s8.25-1.847 8.25-4.125"/></svg>',
+  cpu:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z"/></svg>',
+  plus:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>',
+  gift:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 11.25v8.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 1 0 9.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1 1 14.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z"/></svg>',
+  globe:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/></svg>',
+  cart:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"/></svg>',
+  users:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/></svg>',
+  list:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>',
+  money:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>',
+  server:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 17.25v.75a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25v-.75m19.5 0A2.25 2.25 0 0 0 21.75 15V9a2.25 2.25 0 0 0-2.25-2.25h-15A2.25 2.25 0 0 0 2.25 9v6a2.25 2.25 0 0 0 2.25 2.25m19.5 0h-19.5M12 12h.008v.008H12V12Z"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>',
+  refresh:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>',
+  memory:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-.98.626-1.813 1.5-2.122"/></svg>',
+  key:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 0 1 21.75 8.25Z"/></svg>',
+  user:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>',
+  logout:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"/></svg>',
+  home:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>',
+  warning:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>',
+  check:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>',
+  trash:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>',
+  edit:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/></svg>',
+  palette:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a8.25 8.25 0 0 1-2.883-15.98A8.25 8.25 0 0 1 21 9.75c0 1.243-1.007 2.25-2.25 2.25h-1.83a1.62 1.62 0 0 0-1.17 2.744c.3.311.483.734.483 1.2 0 .995-.897 1.759-1.874 1.552A8.279 8.279 0 0 1 12 21Z"/><circle cx="7.75" cy="11.25" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="8" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  image:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75 6 12l3.5 3.5L15 9l6.75 6.75M4.5 19.5h15a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5h-15A1.5 1.5 0 0 0 3 6v12a1.5 1.5 0 0 0 1.5 1.5Z"/><circle cx="8" cy="8.5" r="1.25" fill="currentColor" stroke="none"/></svg>',
+};
+
+/**
+ * Returns an SVG string with the given classes injected.
+ * Usage in EJS: <%- icon('coin', 'h-4 w-4 text-yellow-400') %>
+ */
+function icon(name, cls) {
+  const svg = ICONS[name] || ICONS['settings'];
+  cls = cls || 'h-4 w-4';
+  return svg.replace('<svg ', '<svg class="' + cls + '" ');
+}
+
+module.exports = { icon, ICONS };
+FUSIONDASH_EOF_ICONS_JS
+
+echo "Writing themes.js"
+cat > "themes.js" << 'FUSIONDASH_EOF_THEMES_JS'
+'use strict';
+/**
+ * themes.js — Theme engine for FusionDash.
+ *
+ * Storage model:
+ *   /themes/presets/<slug>/theme.json   — shipped with the app, read-only, tracked by git
+ *   /themes/custom/<slug>/theme.json    — admin-created, editable, protected from
+ *                                          auto-update via .fusionignore (see auto-update.js)
+ *   /themes/custom/<slug>/assets/*      — uploaded logos/fonts/backgrounds for that theme
+ *
+ * Only the *active theme slug* lives in the sqlite `settings` table (a tiny pointer,
+ * not "theme data"), since that table is runtime state and was never meant to be
+ * hand-edited the way CSS/fonts/images are.
+ */
+const fs   = require('fs');
+const path = require('path');
+const db   = require('./db');
+
+const THEMES_ROOT   = path.join(__dirname, 'themes');
+const PRESETS_DIR    = path.join(THEMES_ROOT, 'presets');
+const CUSTOM_DIR      = path.join(THEMES_ROOT, 'custom');
+const DEFAULT_SLUG  = 'midnight';
+
+fs.mkdirSync(PRESETS_DIR, { recursive: true });
+fs.mkdirSync(CUSTOM_DIR, { recursive: true });
+
+// ── Defaults (also doubles as the deep-merge base so partial/older theme.json
+//    files never crash the CSS generator if a field is missing) ─────────────
+const DEFAULT_THEME = {
+  slug: 'midnight',
+  name: 'Midnight (Default)',
+  palette: {
+    pageBackground: '#0c0d0f',
+    bodyText: '#e4e4e7',
+    neutral: { '950': '#09090b', '900': '#18181b', '800': '#27272a', '700': '#3f3f46', '600': '#52525b', '500': '#71717a', '400': '#a1a1aa', '300': '#d4d4d8' },
+    accent:  { '300': '#93c5fd', '400': '#60a5fa', '500': '#3b82f6', '600': '#2563eb' },
+  },
+  typography: {
+    fontFamily: "'Space Grotesk', system-ui, sans-serif",
+    fontSource: 'google',  // 'google' | 'custom'
+    googleFontUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
+    customFontUrl: null,
+    baseFontSize: '16px',
+  },
+  layout: {
+    radiusScale: 1,
+    cardShadow: '0 1px 2px rgba(0,0,0,.4)',
+  },
+  animations: {
+    enabled: true,
+    speed: '0.18s',
+    style: 'fade',        // fade | slide | none
+    cardHover: false,
+    buttonTransition: true,
+  },
+  images: {
+    logoUrl: null,
+    loginBackgroundUrl: null,
+    bodyBackgroundUrl: null,
+  },
+  customCss: '',
+};
+
+function isPlainObject(v) { return v && typeof v === 'object' && !Array.isArray(v); }
+function deepMerge(base, over) {
+  const out = Array.isArray(base) ? [...base] : { ...base };
+  for (const k of Object.keys(over || {})) {
+    out[k] = isPlainObject(base?.[k]) && isPlainObject(over[k]) ? deepMerge(base[k], over[k]) : over[k];
+  }
+  return out;
+}
+
+function slugify(str) {
+  return String(str || '').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'theme';
+}
+
+function dirFor(slug) {
+  if (!slug || /[./\\]/.test(slug)) return null; // reject traversal-y slugs from URL params
+  const custom = path.join(CUSTOM_DIR, slug);
+  if (fs.existsSync(path.join(custom, 'theme.json'))) return { dir: custom, preset: false };
+  const preset = path.join(PRESETS_DIR, slug);
+  if (fs.existsSync(path.join(preset, 'theme.json'))) return { dir: preset, preset: true };
+  return null;
+}
+
+function loadTheme(slug) {
+  const loc = dirFor(slug);
+  if (!loc) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(loc.dir, 'theme.json'), 'utf8'));
+    return { ...deepMerge(DEFAULT_THEME, raw), slug, preset: loc.preset };
+  } catch {
+    return { ...DEFAULT_THEME, slug, preset: loc.preset };
+  }
+}
+
+function listThemes() {
+  const activeSlug = getActiveSlug();
+  const fromDir = (dir, preset) => fs.existsSync(dir)
+    ? fs.readdirSync(dir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && fs.existsSync(path.join(dir, d.name, 'theme.json')))
+        .map(d => {
+          const t = loadTheme(d.name);
+          return {
+            slug: d.name, name: t?.name || d.name, preset, active: d.name === activeSlug,
+            swatches: { bg: t.palette.pageBackground, panel: t.palette.neutral['900'], accent: t.palette.accent['500'] },
+          };
+        })
+    : [];
+  return [...fromDir(PRESETS_DIR, true), ...fromDir(CUSTOM_DIR, false)];
+}
+
+function getActiveSlug() {
+  const row = db.prepare('SELECT value FROM settings WHERE key=?').get('active_theme');
+  const slug = row?.value || DEFAULT_SLUG;
+  return dirFor(slug) ? slug : DEFAULT_SLUG;
+}
+
+function setActiveSlug(slug) {
+  if (!dirFor(slug)) throw new Error('Theme not found: ' + slug);
+  db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+    .run('active_theme', slug);
+}
+
+function getActiveTheme() {
+  return loadTheme(getActiveSlug()) || { ...DEFAULT_THEME, slug: DEFAULT_SLUG, preset: true };
+}
+
+function createTheme({ name, cloneFrom }) {
+  const base = cloneFrom ? (loadTheme(cloneFrom) || DEFAULT_THEME) : DEFAULT_THEME;
+  let slug = slugify(name);
+  let i = 2;
+  while (fs.existsSync(path.join(CUSTOM_DIR, slug))) { slug = `${slugify(name)}-${i++}`; }
+  const dir = path.join(CUSTOM_DIR, slug);
+  fs.mkdirSync(path.join(dir, 'assets'), { recursive: true });
+  const { slug: _s, preset: _p, ...clean } = base;
+  const theme = { ...clean, name: name || 'Untitled Theme' };
+  fs.writeFileSync(path.join(dir, 'theme.json'), JSON.stringify(theme, null, 2));
+  return slug;
+}
+
+function saveTheme(slug, updates) {
+  const loc = dirFor(slug);
+  if (!loc || loc.preset) throw new Error('Only custom themes can be edited.');
+  const current = loadTheme(slug);
+  const { slug: _s, preset: _p, ...cleanCurrent } = current;
+  const merged = deepMerge(cleanCurrent, updates);
+  fs.writeFileSync(path.join(loc.dir, 'theme.json'), JSON.stringify(merged, null, 2));
+  return merged;
+}
+
+function deleteTheme(slug) {
+  const loc = dirFor(slug);
+  if (!loc || loc.preset) throw new Error('Only custom themes can be deleted.');
+  if (getActiveSlug() === slug) throw new Error('Cannot delete the active theme. Activate another theme first.');
+  fs.rmSync(loc.dir, { recursive: true, force: true });
+}
+
+function assetDir(slug) {
+  const loc = dirFor(slug);
+  if (!loc) throw new Error('Theme not found: ' + slug);
+  return path.join(loc.dir, 'assets');
+}
+
+function assetUrl(slug, filename) {
+  const loc = dirFor(slug);
+  const kind = loc?.preset ? 'presets' : 'custom';
+  return `/theme-assets/${kind}/${slug}/assets/${filename}`;
+}
+
+// ── CSS generation ───────────────────────────────────────────────────────────
+// Re-skins the Tailwind utility classes actually used across the app's views
+// (confirmed via a full grep of the codebase) by redeclaring them after the
+// Tailwind CDN stylesheet loads, driven by CSS custom properties.
+const NEUTRAL_SHADES = ['950', '900', '800', '700', '600', '500', '400', '300'];
+const ACCENT_SHADES   = ['300', '400', '500', '600'];
+const NEUTRAL_PROPS = [
+  ['bg', 'background-color'], ['text', 'color'], ['ring', '--tw-ring-color'], ['border', 'border-color'],
+];
+
+function generateCSS(theme) {
+  const p = theme.palette, t = theme.typography, l = theme.layout, a = theme.animations, img = theme.images;
+  const vars = [];
+  vars.push(`--fd-page-bg:${p.pageBackground};`, `--fd-body-text:${p.bodyText};`);
+  for (const s of NEUTRAL_SHADES) vars.push(`--fd-n${s}:${p.neutral[s]};`);
+  for (const s of ACCENT_SHADES)  vars.push(`--fd-a${s}:${p.accent[s]};`);
+  vars.push(`--fd-font:${t.fontFamily};`, `--fd-font-size:${t.baseFontSize};`);
+  vars.push(`--fd-radius-scale:${l.radiusScale};`, `--fd-shadow:${l.cardShadow};`);
+  vars.push(`--fd-speed:${a.enabled ? a.speed : '0s'};`);
+
+  const rules = [];
+  rules.push(`:root{${vars.join('')}}`);
+  if (t.fontSource === 'custom' && t.customFontUrl) {
+    rules.push(`@font-face{font-family:'FDCustomFont';src:url('${t.customFontUrl}');font-display:swap;}`);
+  }
+  rules.push(`body{background:var(--fd-page-bg);color:var(--fd-body-text);font-family:var(--fd-font);font-size:var(--fd-font-size);}`);
+
+  for (const s of NEUTRAL_SHADES) for (const [prefix, prop] of NEUTRAL_PROPS) {
+    rules.push(`.${prefix}-zinc-${s}{${prop}:var(--fd-n${s}) !important;}`);
+  }
+  for (const s of ACCENT_SHADES) for (const [prefix, prop] of NEUTRAL_PROPS) {
+    rules.push(`.${prefix}-blue-${s}{${prop}:var(--fd-a${s}) !important;}`);
+  }
+
+  // Roundness scale (rounded-full is left alone on purpose — it's a pill/circle
+  // shape, not a decorative radius, so it shouldn't move with this slider)
+  rules.push(`.rounded{border-radius:calc(.25rem * var(--fd-radius-scale)) !important;}`);
+  rules.push(`.rounded-lg{border-radius:calc(.5rem * var(--fd-radius-scale)) !important;}`);
+  rules.push(`.rounded-xl{border-radius:calc(.75rem * var(--fd-radius-scale)) !important;}`);
+  rules.push(`.rounded-2xl{border-radius:calc(1rem * var(--fd-radius-scale)) !important;}`);
+  rules.push(`.rounded-3xl{border-radius:calc(1.5rem * var(--fd-radius-scale)) !important;}`);
+
+  // Animations
+  if (a.enabled && a.style !== 'none') {
+    const from = a.style === 'slide' ? 'opacity:0;transform:translateY(14px)' : 'opacity:0;transform:translateY(4px)';
+    rules.push(`@keyframes fdFadeIn{from{${from}}to{opacity:1;transform:none}}`);
+    rules.push(`main{animation:fdFadeIn var(--fd-speed) ease;}`);
+  } else {
+    rules.push(`main{animation:none;}`);
+  }
+  if (a.buttonTransition) {
+    rules.push(`button,a.tab-btn,input,select,textarea{transition:background-color var(--fd-speed) ease,color var(--fd-speed) ease,border-color var(--fd-speed) ease,transform var(--fd-speed) ease;}`);
+  }
+  if (a.cardHover) {
+    rules.push(`.rounded-2xl:hover,.rounded-xl:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.35);}`);
+  }
+
+  // Images
+  if (img.bodyBackgroundUrl) {
+    rules.push(`body{background-image:url('${img.bodyBackgroundUrl}');background-size:cover;background-attachment:fixed;background-position:center;}`);
+  }
+  if (img.loginBackgroundUrl) {
+    rules.push(`body.has-login-bg{background-image:url('${img.loginBackgroundUrl}'),linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.55));background-blend-mode:darken;background-size:cover;background-position:center;}`);
+  }
+
+  if (theme.customCss) rules.push(theme.customCss);
+
+  return rules.join('\n');
+}
+
+module.exports = {
+  THEMES_ROOT, PRESETS_DIR, CUSTOM_DIR, DEFAULT_SLUG, DEFAULT_THEME,
+  listThemes, loadTheme, getActiveSlug, setActiveSlug, getActiveTheme,
+  createTheme, saveTheme, deleteTheme, assetDir, assetUrl, generateCSS, slugify,
+};
+FUSIONDASH_EOF_THEMES_JS
+
+echo "Writing package.json"
+cat > "package.json" << 'FUSIONDASH_EOF_PACKAGE_JSON'
+{
+  "name": "pterodactyl-billing-dashboard",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "create:user": "node scripts/create-user.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4",
+    "passport-google-oauth20": "^2.0.0",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "better-sqlite3": "^11.3.0",
+    "axios": "^1.7.7",
+    "multer": "^1.4.5-lts.1"
+  }
+}
+FUSIONDASH_EOF_PACKAGE_JSON
+printf %s "$(cat "package.json")" > "package.json"
+
+echo "Writing .fusionignore"
+cat > ".fusionignore" << 'FUSIONDASH_EOF__FUSIONIGNORE'
+# Paths listed here (relative to the project root, one per line) are backed up
+# before the auto-updater runs `git reset --hard` and restored immediately after,
+# so admin customizations under these paths survive updates untouched.
+#
+# Lines starting with # and blank lines are ignored.
+
+themes/custom/
+FUSIONDASH_EOF__FUSIONIGNORE
+
+echo "Writing views/components/admin_tabs.ejs"
+cat > "views/components/admin_tabs.ejs" << 'FUSIONDASH_EOF_VIEWS_COMPONENTS_ADMIN_TABS_EJS'
+<%
+  const _adminTabs = [
+    { id:'settings', label:'Settings',     href:'/admin',              iconName:'settings' },
+    { id:'apis',     label:'Earn APIs',    href:'/admin/apis',         iconName:'link'     },
+    { id:'plans',    label:'Plans',        href:'/admin/plans',        iconName:'money'    },
+    { id:'themes',   label:'Themes',       href:'/admin/themes',       iconName:'palette'  },
+    { id:'store',    label:'Store Items',  href:'/admin/store',        iconName:'cart'     },
+    { id:'nodes',    label:'Nodes',        href:'/admin/nodes',        iconName:'server'   },
+    { id:'servers',  label:'Servers',      href:'/admin/servers',      iconName:'server'   },
+    { id:'users',    label:'Users',        href:'/admin/users',        iconName:'users'    },
+    { id:'txns',     label:'Transactions', href:'/admin/transactions', iconName:'list'     },
+    { id:'eggs',     label:'Eggs',         href:'/admin/eggs',         iconName:'database' },
+    { id:'audit',    label:'Audit Log',    href:'/admin/audit',        iconName:'refresh'  },
+  ];
+%>
+<div class="sticky top-0 z-10 flex overflow-x-auto gap-x-0.5 px-4 sm:px-6 lg:px-8 bg-[#0c0d0f] border-b border-white/[0.06]">
+  <% _adminTabs.forEach(tab => { %>
+  <a href="<%= tab.href %>"
+    class="tab-btn shrink-0 flex items-center gap-x-1.5 px-4 py-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap
+      <%= typeof adminTab !== 'undefined' && adminTab === tab.id ? 'border-blue-400 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:border-zinc-600' %>">
+    <%- icon(tab.iconName, 'h-3.5 w-3.5') %> <%= tab.label %>
+  </a>
+  <% }) %>
+</div>
+FUSIONDASH_EOF_VIEWS_COMPONENTS_ADMIN_TABS_EJS
+
+echo "Writing views/components/header.ejs"
+cat > "views/components/header.ejs" << 'FUSIONDASH_EOF_VIEWS_COMPONENTS_HEADER_EJS'
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle + ' — ' + appName : appName %></title>
+  <% if (appFavicon) { %>
+  <link rel="icon" href="<%= appFavicon %>">
+  <% } else { %>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231d4ed8'/><text y='.9em' font-size='70' x='15' fill='white'>F</text></svg>">
+  <% } %>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <% if (typeof theme !== 'undefined' && theme.typography.fontSource === 'custom' && theme.typography.customFontUrl) { %>
+  <!-- Custom uploaded font: @font-face is emitted in the theme <style> block below -->
+  <% } else { %>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="<%= (typeof theme !== 'undefined' && theme.typography.googleFontUrl) || 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap' %>" rel="stylesheet">
+  <% } %>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { min-height: 100vh; }
+    .app-shell { display: flex; min-height: 100vh; }
+    @media (min-width: 1024px) {
+      .app-main { margin-left: 256px; width: calc(100% - 256px); }
+    }
+    @media (max-width: 1023px) {
+      .app-main { margin-left: 0; width: 100%; padding-top: 52px; }
+    }
+    input[type="range"] { accent-color: var(--fd-a400, #60a5fa); }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      background: var(--fd-a500, #3b82f6);
+      height: 16px; width: 16px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    :focus-visible { outline: 2px solid var(--fd-a500, #3b82f6); outline-offset: 2px; }
+    .no-scroll::-webkit-scrollbar { width: 4px; }
+    .no-scroll::-webkit-scrollbar-track { background: transparent; }
+    .no-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+  </style>
+  <% if (typeof themeCSS !== 'undefined') { %>
+  <!-- Active theme: generated last so it wins the cascade over Tailwind + the structural CSS above -->
+  <style><%- themeCSS %></style>
+  <% } %>
+</head>
+FUSIONDASH_EOF_VIEWS_COMPONENTS_HEADER_EJS
+printf '%.0s\n' $(seq 1 1) >> "views/components/header.ejs"
+
+echo "Writing views/login.ejs"
+cat > "views/login.ejs" << 'FUSIONDASH_EOF_VIEWS_LOGIN_EJS'
+<!doctype html>
+<html lang="en">
+<%- include('./components/header') %>
+<body class="flex min-h-screen items-center justify-center <%= (typeof theme !== 'undefined' && theme.images.loginBackgroundUrl) ? 'has-login-bg' : '' %>">
+  <div class="flex min-h-full flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+      <h2 class="mt-6 text-center text-2xl font-medium leading-9 text-white">Welcome to <%= appName %></h2>
+      <h2 class="mt-1 text-center text-sm font-normal text-zinc-500">Sign in to manage your servers.</h2>
+    </div>
+
+    <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-[480px]">
+      <div class="bg-zinc-600/10 px-6 py-10 border border-white/5 rounded-3xl sm:px-12">
+
+        <% if (error) { %>
+        <div class="mb-6 border border-amber-400/10 bg-amber-400/5 rounded-2xl p-4">
+          <p class="text-sm text-amber-400 text-center"><%= error %></p>
+        </div>
+        <% } %>
+
+        <div class="relative mb-8">
+          <div class="absolute inset-0 flex items-center" aria-hidden="true">
+            <div class="w-full border-t border-white/10"></div>
+          </div>
+          <div class="relative flex justify-center text-sm font-medium leading-6">
+            <span class="bg-[#151619] px-6 text-zinc-400">Choose a login method</span>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <a href="/auth/discord" class="flex w-full items-center justify-center gap-x-3 rounded-full bg-[#5865F2]/10 px-6 py-2.5 text-sm font-medium text-[#5865F2] ring-1 ring-inset ring-[#5865F2]/20 hover:bg-[#5865F2]/20 transition">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.043.033.054a19.9 19.9 0 0 0 5.993 3.03.077.077 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+            </svg>
+            Continue with Discord
+          </a>
+
+          <a href="/auth/google" class="flex w-full items-center justify-center gap-x-3 rounded-full bg-zinc-600/10 px-6 py-2.5 text-sm font-medium text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-zinc-600/20 transition">
+            <svg class="h-4 w-4" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
+          </a>
+        </div>
+      </div>
+
+      <% if (!hideCredit) { %>
+      <p class="mt-6 text-center text-sm text-zinc-600">
+        <a href="https://github.com/lagging-human/FusionDash" target="_blank" class="text-zinc-500 hover:text-zinc-300 transition-colors"><%= appName %></a>
+      </p>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>
+FUSIONDASH_EOF_VIEWS_LOGIN_EJS
+
+echo "Writing views/admin/themes.ejs"
+cat > "views/admin/themes.ejs" << 'FUSIONDASH_EOF_VIEWS_ADMIN_THEMES_EJS'
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/ Themes</span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Themes</p>
+    </div>
+    <span class="text-xs text-zinc-600"><%= themeList.length %> theme<%= themeList.length !== 1 ? 's' : '' %></span>
+  </div>
+
+  <%- include('../components/admin_tabs', { adminTab: 'themes' }) %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-16 space-y-5">
+
+    <p class="text-xs text-zinc-500 max-w-2xl">
+      The active theme applies across the whole site — login, dashboard, billing, checkout, and admin.
+      Presets are read-only; duplicate one to customize colors, fonts, layout, animations, images, and raw CSS.
+      Custom themes live in <code class="text-zinc-400 bg-zinc-900 rounded px-1">/themes/custom/</code> and are protected from auto-update via <code class="text-zinc-400 bg-zinc-900 rounded px-1">.fusionignore</code>.
+    </p>
+
+    <!-- Create new theme -->
+    <div class="rounded-2xl border border-blue-500/20 bg-blue-500/5 overflow-hidden">
+      <div class="flex items-center gap-x-2 px-5 py-3 border-b border-blue-500/20">
+        <%- icon('plus', 'h-4 w-4 text-blue-400') %>
+        <p class="text-sm font-semibold text-white">Create New Theme</p>
+      </div>
+      <form action="/admin/themes/create" method="POST" class="p-5 flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-[180px]">
+          <label class="block text-xs text-zinc-500 mb-1">Name</label>
+          <input type="text" name="name" placeholder="My Custom Theme" required
+            class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+        </div>
+        <div class="flex-1 min-w-[180px]">
+          <label class="block text-xs text-zinc-500 mb-1">Start from</label>
+          <select name="cloneFrom" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+            <% themeList.forEach(t => { %>
+            <option value="<%= t.slug %>"><%= t.name %> <%= t.preset ? '(preset)' : '(custom)' %></option>
+            <% }) %>
+          </select>
+        </div>
+        <button type="submit" class="rounded-full bg-blue-500/15 px-5 py-2 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+          Create &amp; Customize
+        </button>
+      </form>
+    </div>
+
+    <!-- Theme list -->
+    <div class="card-grid">
+      <% themeList.forEach(t => { %>
+      <% const full = t.slug; %>
+      <div class="rounded-2xl border <%= t.active ? 'border-blue-500/30' : 'border-white/[0.06]' %> overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <p class="text-sm font-semibold text-white"><%= t.name %></p>
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium <%= t.preset ? 'bg-zinc-500/10 text-zinc-400 ring-1 ring-zinc-500/20' : 'bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20' %>">
+            <%= t.preset ? 'Preset' : 'Custom' %>
+          </span>
+          <% if (t.active) { %>
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-500/10 text-green-400 ring-1 ring-green-500/20">Active</span>
+          <% } %>
+        </div>
+        <div class="p-5">
+          <div class="flex gap-1.5 mb-4">
+            <div class="h-8 w-8 rounded-lg ring-1 ring-inset ring-white/10" style="background:<%= t.swatches.bg %>"></div>
+            <div class="h-8 w-8 rounded-lg ring-1 ring-inset ring-white/10" style="background:<%= t.swatches.panel %>"></div>
+            <div class="h-8 w-8 rounded-lg ring-1 ring-inset ring-white/10" style="background:<%= t.swatches.accent %>"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <% if (!t.active) { %>
+            <form action="/admin/themes/<%= full %>/activate" method="POST">
+              <button type="submit" class="rounded-full bg-green-500/15 px-4 py-1.5 text-xs font-semibold text-green-400 ring-1 ring-inset ring-green-500/30 hover:bg-green-500/25 transition-colors">Activate</button>
+            </form>
+            <% } %>
+            <% if (!t.preset) { %>
+            <a href="/admin/themes/<%= full %>/edit" class="rounded-full bg-zinc-500/10 px-4 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-500/20 hover:bg-zinc-500/20 transition-colors">Edit</a>
+            <% } %>
+            <% if (!t.active && !t.preset) { %>
+            <form action="/admin/themes/<%= full %>/delete" method="POST" onsubmit="return confirm('Delete theme &quot;<%= t.name %>&quot;? This cannot be undone.')">
+              <button type="submit" class="rounded-full bg-red-500/10 px-4 py-1.5 text-xs font-semibold text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/15 transition-colors">Delete</button>
+            </form>
+            <% } %>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+FUSIONDASH_EOF_VIEWS_ADMIN_THEMES_EJS
+
+echo "Writing views/admin/theme-edit.ejs"
+cat > "views/admin/theme-edit.ejs" << 'FUSIONDASH_EOF_VIEWS_ADMIN_THEME-EDIT_EJS'
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/</span> <a href="/admin/themes" class="hover:text-zinc-300 transition-colors">Themes</a> <span class="text-zinc-700">/ <%= theme.name %></span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Edit Theme</p>
+    </div>
+    <a href="/admin/themes" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">&larr; Back to Themes</a>
+  </div>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-5 max-w-4xl">
+
+    <form action="/admin/themes/<%= theme.slug %>/update" method="POST" class="space-y-5">
+
+      <div>
+        <label class="block text-xs text-zinc-500 mb-1">Theme Name</label>
+        <input type="text" name="name" value="<%= theme.name %>" required
+          class="block w-full max-w-sm rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+      </div>
+
+      <!-- Colors -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('palette', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Colors</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Page Background</label>
+              <input type="color" name="pageBackground" value="<%= theme.palette.pageBackground %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Body Text</label>
+              <input type="color" name="bodyText" value="<%= theme.palette.bodyText %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500 mb-2">Neutral scale <span class="text-zinc-700">(950 = darkest panels &rarr; 300 = lightest text)</span></p>
+            <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              <% ['950','900','800','700','600','500','400','300'].forEach(s => { %>
+              <div>
+                <label class="block text-[10px] text-zinc-600 mb-1 text-center"><%= s %></label>
+                <input type="color" name="n<%= s %>" value="<%= theme.palette.neutral[s] %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+              </div>
+              <% }) %>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs text-zinc-500 mb-2">Accent scale <span class="text-zinc-700">(buttons, links, focus rings)</span></p>
+            <div class="grid grid-cols-4 gap-2 max-w-xs">
+              <% ['300','400','500','600'].forEach(s => { %>
+              <div>
+                <label class="block text-[10px] text-zinc-600 mb-1 text-center"><%= s %></label>
+                <input type="color" name="a<%= s %>" value="<%= theme.palette.accent[s] %>" class="h-9 w-full rounded-lg bg-zinc-900 ring-1 ring-inset ring-zinc-700">
+              </div>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typography -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('edit', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Typography</p>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Font Family <span class="text-zinc-700">(CSS value)</span></label>
+            <input type="text" name="fontFamily" value="<%= theme.typography.fontFamily %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Base Font Size</label>
+            <input type="text" name="baseFontSize" value="<%= theme.typography.baseFontSize %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs text-zinc-500 mb-1">Google Font URL <span class="text-zinc-700">(ignored if a custom font is uploaded below)</span></label>
+            <input type="text" name="googleFontUrl" value="<%= theme.typography.googleFontUrl || '' %>" placeholder="https://fonts.googleapis.com/css2?family=..."
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Layout -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('settings', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Layout</p>
+        </div>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Corner Roundness <span class="text-zinc-700" id="radiusVal"><%= theme.layout.radiusScale %>&times;</span></label>
+            <input type="range" name="radiusScale" min="0" max="2" step="0.1" value="<%= theme.layout.radiusScale %>"
+              oninput="document.getElementById('radiusVal').textContent = this.value + '\u00d7'"
+              class="block w-full">
+            <p class="text-[10px] text-zinc-700 mt-1">0 = sharp corners, 1 = default, 2 = extra rounded. Pills/avatars are unaffected.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Card Shadow <span class="text-zinc-700">(CSS box-shadow value)</span></label>
+            <input type="text" name="cardShadow" value="<%= theme.layout.cardShadow %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Animations -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('bolt', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Animations</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="animEnabled" <%= theme.animations.enabled ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Enable page-load animation</span>
+          </label>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg">
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Style</label>
+              <select name="animStyle" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                <% ['fade','slide','none'].forEach(v => { %>
+                <option value="<%= v %>" <%= theme.animations.style===v?'selected':'' %>><%= v %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-zinc-500 mb-1">Speed</label>
+              <select name="animSpeed" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+                <% ['0.1s','0.18s','0.3s','0.5s'].forEach(v => { %>
+                <option value="<%= v %>" <%= theme.animations.speed===v?'selected':'' %>><%= v %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="cardHover" <%= theme.animations.cardHover ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Cards lift on hover</span>
+          </label>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
+            <div class="relative">
+              <input type="checkbox" name="buttonTransition" <%= theme.animations.buttonTransition ? 'checked' : '' %> class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Smooth transitions on buttons &amp; inputs</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Custom CSS -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('edit', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Custom CSS</p>
+        </div>
+        <div class="p-5">
+          <textarea name="customCss" rows="8" placeholder="/* Applied last — overrides everything above */"
+            class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono"><%= theme.customCss %></textarea>
+        </div>
+      </div>
+
+      <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        Save Theme
+      </button>
+    </form>
+
+    <!-- Images & custom font (separate multipart form) -->
+    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+      <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+        <%- icon('image', 'h-4 w-4 text-blue-400') %>
+        <p class="text-sm font-semibold text-white">Images &amp; Custom Font</p>
+      </div>
+      <form action="/admin/themes/<%= theme.slug %>/upload" method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Logo / Favicon</label>
+            <% if (theme.images.logoUrl) { %><img src="<%= theme.images.logoUrl %>" class="h-8 w-8 rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="logo" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Custom Font <span class="text-zinc-700">(.woff2/.woff/.ttf)</span></label>
+            <% if (theme.typography.fontSource === 'custom' && theme.typography.customFontUrl) { %><p class="text-[11px] text-green-400 mb-2">Active: uploaded font in use</p><% } %>
+            <input type="file" name="customFont" accept=".woff,.woff2,.ttf,.otf" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Login Background</label>
+            <% if (theme.images.loginBackgroundUrl) { %><img src="<%= theme.images.loginBackgroundUrl %>" class="h-16 w-full rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="loginBackground" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Sitewide Background</label>
+            <% if (theme.images.bodyBackgroundUrl) { %><img src="<%= theme.images.bodyBackgroundUrl %>" class="h-16 w-full rounded-lg object-cover mb-2 ring-1 ring-inset ring-white/10"><% } %>
+            <input type="file" name="bodyBackground" accept="image/*" class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-300">
+          </div>
+        </div>
+        <button type="submit" class="rounded-full bg-zinc-500/10 px-5 py-2 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-500/20 hover:bg-zinc-500/20 transition-colors">
+          Upload
+        </button>
+      </form>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
+FUSIONDASH_EOF_VIEWS_ADMIN_THEME-EDIT_EJS
+
+echo "Writing themes/presets/midnight/theme.json"
+cat > "themes/presets/midnight/theme.json" << 'FUSIONDASH_EOF_THEMES_PRESETS_MIDNIGHT_THEME_JSON'
+{
+  "name": "Midnight (Default)",
+  "palette": {
+    "pageBackground": "#0c0d0f",
+    "bodyText": "#e4e4e7",
+    "neutral": { "950": "#09090b", "900": "#18181b", "800": "#27272a", "700": "#3f3f46", "600": "#52525b", "500": "#71717a", "400": "#a1a1aa", "300": "#d4d4d8" },
+    "accent":  { "300": "#93c5fd", "400": "#60a5fa", "500": "#3b82f6", "600": "#2563eb" }
+  },
+  "typography": {
+    "fontFamily": "'Space Grotesk', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1, "cardShadow": "0 1px 2px rgba(0,0,0,.4)" },
+  "animations": { "enabled": true, "speed": "0.18s", "style": "fade", "cardHover": false, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}
+FUSIONDASH_EOF_THEMES_PRESETS_MIDNIGHT_THEME_JSON
+
+echo "Writing themes/presets/daylight/theme.json"
+cat > "themes/presets/daylight/theme.json" << 'FUSIONDASH_EOF_THEMES_PRESETS_DAYLIGHT_THEME_JSON'
+{
+  "name": "Daylight",
+  "palette": {
+    "pageBackground": "#f4f4f5",
+    "bodyText": "#18181b",
+    "neutral": { "950": "#ffffff", "900": "#fbfbfc", "800": "#f1f1f3", "700": "#e0e0e4", "600": "#c9c9d0", "500": "#6b6b74", "400": "#45454c", "300": "#1f1f23" },
+    "accent":  { "300": "#bfdbfe", "400": "#60a5fa", "500": "#2563eb", "600": "#1d4ed8" }
+  },
+  "typography": {
+    "fontFamily": "'Space Grotesk', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1, "cardShadow": "0 1px 3px rgba(0,0,0,.08)" },
+  "animations": { "enabled": true, "speed": "0.18s", "style": "fade", "cardHover": false, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}
+FUSIONDASH_EOF_THEMES_PRESETS_DAYLIGHT_THEME_JSON
+
+echo "Writing themes/presets/aurora/theme.json"
+cat > "themes/presets/aurora/theme.json" << 'FUSIONDASH_EOF_THEMES_PRESETS_AURORA_THEME_JSON'
+{
+  "name": "Aurora",
+  "palette": {
+    "pageBackground": "#0a0a12",
+    "bodyText": "#e6e6f0",
+    "neutral": { "950": "#0a0a12", "900": "#161622", "800": "#232336", "700": "#34344a", "600": "#4a4a63", "500": "#6d6d87", "400": "#9d9db4", "300": "#cfcfe0" },
+    "accent":  { "300": "#c4b5fd", "400": "#a78bfa", "500": "#8b5cf6", "600": "#7c3aed" }
+  },
+  "typography": {
+    "fontFamily": "'Sora', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1.3, "cardShadow": "0 1px 2px rgba(0,0,0,.4)" },
+  "animations": { "enabled": true, "speed": "0.22s", "style": "slide", "cardHover": true, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}
+FUSIONDASH_EOF_THEMES_PRESETS_AURORA_THEME_JSON
+
+echo "Writing themes/presets/sunset/theme.json"
+cat > "themes/presets/sunset/theme.json" << 'FUSIONDASH_EOF_THEMES_PRESETS_SUNSET_THEME_JSON'
+{
+  "name": "Sunset",
+  "palette": {
+    "pageBackground": "#120d09",
+    "bodyText": "#f1e4d5",
+    "neutral": { "950": "#120d09", "900": "#1f1712", "800": "#2e2119", "700": "#453324", "600": "#5c4632", "500": "#8a6e54", "400": "#b89b7c", "300": "#e0cbb0" },
+    "accent":  { "300": "#fdba74", "400": "#fb923c", "500": "#f97316", "600": "#ea580c" }
+  },
+  "typography": {
+    "fontFamily": "'Manrope', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 0.8, "cardShadow": "0 1px 2px rgba(0,0,0,.4)" },
+  "animations": { "enabled": true, "speed": "0.18s", "style": "fade", "cardHover": false, "buttonTransition": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}
+FUSIONDASH_EOF_THEMES_PRESETS_SUNSET_THEME_JSON
+
+echo "Done. 15 files written."
