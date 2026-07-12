@@ -230,6 +230,30 @@ function checkExternalApiKey(req, res) {
   return true;
 }
 
+function formatMB(mb) {
+  const n = Number(mb) || 0;
+  if (n <= 0) return null;
+  if (n % 1024 === 0) return `${n / 1024} GB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1).replace(/\.0$/, '')} GB`;
+  return `${n} MB`;
+}
+
+// Human-readable feature list for a plan detail page. Best-guess wording/order
+// built from FusionDash's actual resource columns — adjust text here if the
+// consumer site expects different phrasing.
+function buildIncluded(p) {
+  const items = [];
+  const mem = formatMB(p.memory);
+  if (mem) items.push(`${mem} RAM`);
+  const disk = formatMB(p.disk);
+  if (disk) items.push(`${disk} SSD Storage`);
+  if (Number(p.cpu) > 0) items.push(`${p.cpu}% CPU`);
+  if (Number(p.ports) > 0) items.push(`${p.ports} Port${p.ports > 1 ? 's' : ''}`);
+  if (Number(p.databases) > 0) items.push(`${p.databases} Database${p.databases > 1 ? 's' : ''}`);
+  if (Number(p.backups) > 0) items.push(`${p.backups} Backup${p.backups > 1 ? 's' : ''}`);
+  return items;
+}
+
 app.get('/api/plans/:type', (req, res) => {
   if (!checkExternalApiKey(req, res)) return;
   // FusionDash only manages Minecraft/Pterodactyl hosting today, so any other
@@ -241,6 +265,7 @@ app.get('/api/plans/:type', (req, res) => {
     name: p.name,
     price: Number(p.price_usd) || 0,   // consumer template does plan.price.toFixed(2)
     period: 'month',                    // FusionDash bills on a flat renewal cycle, no per-plan period yet
+    included: buildIncluded(p),         // consumer template does plan.included.forEach(...)
     price_inr: p.price_inr,
     price_usd: p.price_usd,
     memory: p.memory,
