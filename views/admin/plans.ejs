@@ -130,6 +130,32 @@
             </div>
             <% }) %>
           </div>
+
+          <!-- Available Nodes: which local nodes this plan can be deployed on.
+               nodesPresent always submits (hidden field) so we can tell "picker
+               rendered, admin unchecked everything" apart from "picker didn't
+               render at all" (e.g. nodes table was empty) — see resolveNodeIds
+               in server.js. Without that distinction, an empty-nodes page load
+               would silently wipe every plan's availability on the next save. -->
+          <div class="mb-4">
+            <label class="block text-xs text-zinc-500 mb-2">Available Nodes</label>
+            <% if (!nodes.length) { %>
+            <p class="text-xs text-zinc-600">No nodes synced yet — visit <a href="/admin/nodes" class="text-blue-400 hover:underline">Admin/Nodes</a> first.</p>
+            <% } else { %>
+            <input type="hidden" name="plans[<%= plan.key %>][nodesPresent]" value="1">
+            <% const planNodeIds = (() => { try { return JSON.parse(plan.available_node_ids || '[]'); } catch { return []; } })(); %>
+            <div class="flex flex-wrap gap-2">
+              <% nodes.forEach(n => { const checked = planNodeIds.includes(n.panel_node_id); %>
+              <label class="inline-flex items-center gap-x-1.5 rounded-full border px-3 py-1 cursor-pointer text-xs transition-colors
+                <%= checked ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' : 'border-zinc-700 text-zinc-400 hover:border-zinc-600' %>">
+                <input type="checkbox" name="plans[<%= plan.key %>][nodeIds]" value="<%= n.panel_node_id %>" <%= checked ? 'checked' : '' %> class="sr-only">
+                <%= n.name %><% if (n.location) { %><span class="text-zinc-600">· <%= n.location %></span><% } %>
+              </label>
+              <% }) %>
+            </div>
+            <% } %>
+          </div>
+
           <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit">
             <div class="relative">
               <input type="checkbox" name="plans[<%= plan.key %>][active]" <%= plan.active ? 'checked' : '' %> class="sr-only peer">
