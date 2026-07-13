@@ -36,23 +36,39 @@
         <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
           <%- icon('link', 'h-4 w-4 text-zinc-400') %>
           <p class="text-sm font-semibold text-white">Work.ink</p>
-          <a href="https://work.ink/developers" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+          <a href="https://blog.work.ink/how-to-override-link-destinations-on-the-fly/" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Docs →</a>
+        </div>
+        <div class="p-5">
+          <label class="block text-xs text-zinc-500 mb-1">Your Work.ink Link <span class="text-zinc-700">(the full link you created in your Work.ink dashboard)</span></label>
+          <input type="text" name="workink_link" value="<%= settings.workink_link || '' %>"
+            class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="https://work.ink/1RWN/myoffer">
+        </div>
+        <div class="px-5 pb-4 text-xs text-zinc-600">
+          No postback URL to configure in Work.ink's dashboard — FusionDash uses Work.ink's <span class="text-zinc-400">Link Override API</span> to route users back through <code class="text-zinc-400">/earn/workink/callback</code> automatically. Just paste your link above.
+        </div>
+      </div>
+
+      <!-- Linkvertise -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('link', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Linkvertise</p>
+          <a href="https://publisher.linkvertise.com/" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Dashboard →</a>
         </div>
         <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs text-zinc-500 mb-1">API Key / Secret (sent as <code>secret</code> param)</label>
-            <input type="text" name="workink_api_key" value="<%= settings.workink_api_key || '' %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="sk_...">
+            <label class="block text-xs text-zinc-500 mb-1">Publisher ID <span class="text-zinc-700">(from your script tag, e.g. linkvertise(<strong>123456</strong>, ...))</span></label>
+            <input type="text" name="linkvertise_publisher_id" value="<%= settings.linkvertise_publisher_id || '' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="123456">
           </div>
           <div>
-            <label class="block text-xs text-zinc-500 mb-1">Offer / Locker ID (slug in work.ink/<strong>ID</strong>)</label>
-            <input type="text" name="workink_offer_id" value="<%= settings.workink_offer_id || '' %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm" placeholder="abc123">
+            <label class="block text-xs text-zinc-500 mb-1">Points Tier</label>
+            <input type="text" name="linkvertise_points" value="<%= settings.linkvertise_points || '1000' %>"
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm" placeholder="1000">
           </div>
         </div>
         <div class="px-5 pb-4 text-xs text-zinc-600">
-          Postback URL to set in Work.ink dashboard:
-          <code class="text-zinc-400 ml-1"><%= settings.dashboard_url || 'https://yourdomain.com' %>/earn/workink/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret=<%= settings.workink_api_key || 'YOUR_KEY' %></code>
+          No postback URL needed here either — Linkvertise's dynamic link format redirects straight back through <code class="text-zinc-400">/earn/linkvertise/callback</code> using the destination we pass it.
         </div>
       </div>
 
@@ -115,6 +131,7 @@
         <div class="px-5 pb-4 text-xs text-zinc-600">
           Postback URL to set in Notik dashboard:
           <code class="text-zinc-400 ml-1"><%= settings.dashboard_url || 'https://yourdomain.com' %>/earn/notik/callback?user_id={user_id}&offer_id={offer_id}&payout={payout}&secret=<%= settings.notik_secret_key || 'YOUR_SECRET' %></code>
+          <p class="text-amber-500/80 mt-2">⚠ Unverified: most CPA networks in this family (OfferwallPro, Offerwallmedia, etc.) actually postback as <code class="text-zinc-400">subId</code>/<code class="text-zinc-400">transId</code>/<code class="text-zinc-400">reward</code> with an MD5 <code class="text-zinc-400">signature</code>, not a plain <code class="text-zinc-400">secret</code> match. If Notik rewards aren't crediting, check your Notik dashboard's exact postback parameter names — happy to fix this once confirmed.</p>
         </div>
       </div>
 
