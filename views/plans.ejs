@@ -132,12 +132,6 @@
       margin-top: 10px;
     }
 
-    .checkout-button {
-      display: inline-flex;
-      gap: 10px;
-      margin-top: 20px;
-    }
-
     .btn {
       padding: 10px 16px;
       border-radius: 8px;
@@ -147,7 +141,14 @@
       border: 1px solid transparent;
       transition: all 0.3s ease;
       text-align: center;
-      flex: 1;
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .btn:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: rgba(59, 130, 246, 0.5);
     }
 
     .btn-razorpay {
@@ -159,17 +160,6 @@
     .btn-razorpay:hover {
       background: rgba(59, 130, 246, 0.25);
       border-color: rgba(59, 130, 246, 0.5);
-    }
-
-    .btn-paypal {
-      background: rgba(255, 255, 255, 0.05);
-      color: #e2e8f0;
-      border-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .btn-paypal:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.2);
     }
 
     .empty-state {
@@ -237,11 +227,6 @@
       <p>No plans available yet</p>
       <p style="font-size: 0.875rem;">Check back later or contact the admin</p>
     </div>
-    <% } else if (!gateways.razorpay && !gateways.paypal) { %>
-    <div class="empty-state">
-      <p>No payment methods configured</p>
-      <p style="font-size: 0.875rem;">Please contact the administrator</p>
-    </div>
     <% } else { %>
     <div class="plans-grid">
       <% plans.forEach(plan => { %>
@@ -258,14 +243,7 @@
         <div class="plan-price">
           <div class="price-amount">₹<%= (plan.price_inr/100).toFixed(0) %><span class="price-currency">/mo</span></div>
           <div class="price-period">or $<%= plan.price_usd.toFixed(2) %>/mo</div>
-          <div class="checkout-button">
-            <% if (gateways.razorpay) { %>
-            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="btn btn-razorpay">UPI / Razorpay</a>
-            <% } %>
-            <% if (gateways.paypal) { %>
-            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="btn btn-paypal">PayPal</a>
-            <% } %>
-          </div>
+          <a href="/checkout/<%= plan.key %>" class="btn btn-razorpay" style="margin-top: 20px; display: block;">Get Started</a>
         </div>
       </div>
       <% }) %>
