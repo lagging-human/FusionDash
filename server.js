@@ -353,6 +353,12 @@ app.get('/billing', ensureAuth, (req, res) => {
   });
 });
 
+app.get('/plans', ensureAuth, (req, res) => {
+  const plans    = getAllPlans.all();
+  const gateways = gatewaysAvailable();
+  res.render('plans', { user: req.user, plans, gateways, pageTitle: 'Plans' });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Create Server
 // ─────────────────────────────────────────────────────────────────────────────
