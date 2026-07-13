@@ -156,6 +156,19 @@ CREATE TABLE IF NOT EXISTS coin_log (
   created_at  TEXT DEFAULT (datetime('now'))
 );
 
+-- Single-use tokens for earn networks that verify completion via browser
+-- redirect (Work.ink, Linkvertise) rather than a signed server-to-server
+-- postback. We mint a token before sending the user out, embed it in the
+-- destination URL we control, and only credit coins if that exact token
+-- comes back unused and within the time window.
+CREATE TABLE IF NOT EXISTS earn_claims (
+  token       TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  network     TEXT NOT NULL,
+  used        INTEGER DEFAULT 0,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
 -- Allowed eggs (admin curates which eggs users can pick from)
 CREATE TABLE IF NOT EXISTS allowed_eggs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -323,6 +336,8 @@ const newSettings = {
   paymentwall_app_key: '', paymentwall_secret_key: '',
   paymentwall_widget: 'mw6', paymentwall_coins: '30',
   notik_api_key: '', notik_secret_key: '', notik_coins: '25', notik_offer_url: '',
+  workink_link: '',
+  linkvertise_publisher_id: '', linkvertise_points: '1000', linkvertise_coins: '20',
   app_name: 'FusionDash', app_favicon_url: '',
   renewal_enabled: '0', renewal_price: '5', renewal_days: '30', renewal_grace_days: '1',
   queue_enabled: '1', queue_delay_seconds: '120', queue_max_parallel: '1'
