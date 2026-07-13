@@ -4,6 +4,7 @@ const session  = require('express-session');
 const passport = require('./passport-config');
 const db       = require('./db');
 const path     = require('path');
+const crypto   = require('crypto');
 const multer   = require('multer');
 const ptero    = require('./pterodactyl');
 const payments = require('./payments');
@@ -269,11 +270,13 @@ app.get('/api/plans/:type', (req, res) => {
     price_inr: p.price_inr,
     price_usd: p.price_usd,
     memory: p.memory,
+    ram: p.memory,      // some parts of the consumer UI read `ram` instead of `memory`
     disk: p.disk,
     cpu: p.cpu,
     databases: p.databases,
     backups: p.backups,
     ports: p.ports,
+    slots: p.ports,     // ...and `slots` instead of `ports`
     availability: (() => { try { return JSON.parse(p.available_node_ids || '[]'); } catch { return []; } })(),
   }));
   res.json(plans);
@@ -662,6 +665,32 @@ app.post('/store/buy/:key', ensureAuth, (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Earn Coins  /earn
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Work.ink and Linkvertise both verify offer completion by redirecting the
+// user's browser back to a URL we control, rather than a signed server-to-
+// server postback (that's how Notik/Paymentwall work). We mint a single-use
+// token before sending the user out, embed it in our own callback URL, and
+// only award coins if that exact token comes back unused within the window —
+// this is what stands in for a "secret" here, since neither network sends us
+// one directly.
+function createEarnClaim(userId, network) {
+  const token = crypto.randomBytes(24).toString('hex');
+  db.prepare('INSERT INTO earn_claims (token, user_id, network) VALUES (?,?,?)').run(token, userId, network);
+  return token;
+}
+function consumeEarnClaim(token, network, maxAgeMinutes = 60) {
+  if (!token) return null;
+  const row = db.prepare('SELECT * FROM earn_claims WHERE token=? AND network=?').get(token, network);
+  if (!row || row.used) return null;
+  const ageMin = (Date.now() - new Date(row.created_at).getTime()) / 60000;
+  if (ageMin > maxAgeMinutes) return null;
+  db.prepare('UPDATE earn_claims SET used=1 WHERE token=?').run(token);
+  return row.user_id;
+}
+function getBaseUrl(req) {
+  return process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+}
+
 app.get('/earn', ensureAuth, (req, res) => {
   const s = settingsObj();
   const user = getUser.get(req.user.id);
@@ -675,17 +704,19 @@ app.get('/earn', ensureAuth, (req, res) => {
 
   // Build apis object — only pass sections that are configured
   const apis = {
-    workink:      s.workink_offer_id    ? { offerId: s.workink_offer_id }                                          : null,
-    paymentwall:  s.paymentwall_app_key ? { appKey: s.paymentwall_app_key, widget: s.paymentwall_widget || 'mw6' } : null,
-    notik:        s.notik_api_key       ? { apiKey: s.notik_api_key, offerUrl: s.notik_offer_url }                 : null,
+    workink:      s.workink_link             ? { link: s.workink_link }                                             : null,
+    paymentwall:  s.paymentwall_app_key      ? { appKey: s.paymentwall_app_key, widget: s.paymentwall_widget || 'mw6' } : null,
+    notik:        s.notik_api_key            ? { apiKey: s.notik_api_key, offerUrl: s.notik_offer_url }              : null,
+    linkvertise:  s.linkvertise_publisher_id ? { publisherId: s.linkvertise_publisher_id }                           : null,
   };
 
   res.render('earn/index', {
     user: req.user,
     canClaimDaily, dailyNextIn,
-    dailyCoins:    parseInt(s.daily_coins    || '50', 10),
-    workinkCoins:  parseInt(s.workink_coins  || '20', 10),
-    notikCoins:    parseInt(s.notik_coins    || '25', 10),
+    dailyCoins:      parseInt(s.daily_coins      || '50', 10),
+    workinkCoins:    parseInt(s.workink_coins    || '20', 10),
+    notikCoins:      parseInt(s.notik_coins      || '25', 10),
+    linkvertiseCoins: parseInt(s.linkvertise_coins || '20', 10),
     apis, recentLog, pageTitle: 'Earn Coins',
     error:   req.query.error  || null,
     success: req.query.success || null
@@ -710,35 +741,67 @@ app.post('/earn/daily', ensureAuth, (req, res) => {
   res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
 });
 
-// Work.ink verification callback — user completes offer, Work.ink pings our endpoint
-// Docs: https://work.ink/developers  — set postback URL to /earn/workink/callback
-app.get('/earn/workink/callback', async (req, res) => {
-  const { user_id, offer_id, payout, secret } = req.query;
+// Work.ink link redirect — uses the real Work.ink Link Override API
+// (https://blog.work.ink/how-to-override-link-destinations-on-the-fly/) since
+// Work.ink doesn't send a server-to-server postback with a shared secret the
+// way Notik/Paymentwall do. We mint a claim token, ask Work.ink to override
+// the destination of your configured link to our callback (with the token
+// attached), then send the user there.
+app.get('/earn/workink', ensureAuth, async (req, res) => {
   const s = settingsObj();
+  if (!s.workink_link) return res.redirect('/earn?error=' + encodeURIComponent('Work.ink not configured.'));
 
-  // Validate secret matches our API key (Work.ink sends it as a param)
-  if (!s.workink_api_key || secret !== s.workink_api_key) {
-    return res.status(403).send('Invalid secret');
+  try {
+    const token = createEarnClaim(req.user.id, 'workink');
+    const destination = `${getBaseUrl(req)}/earn/workink/callback?token=${token}`;
+    const overrideRes = await fetch(`https://work.ink/_api/v2/override?destination=${encodeURIComponent(destination)}`);
+    if (!overrideRes.ok) throw new Error(`Work.ink responded ${overrideRes.status}`);
+    const { sr } = await overrideRes.json();
+    if (!sr) throw new Error('No override token in response');
+    const sep = s.workink_link.includes('?') ? '&' : '?';
+    res.redirect(`${s.workink_link}${sep}sr=${sr}`);
+  } catch (err) {
+    console.warn('[workink] override request failed:', err.message);
+    res.redirect('/earn?error=' + encodeURIComponent('Work.ink is temporarily unavailable — try again shortly.'));
   }
-
-  const user = db.prepare('SELECT * FROM users WHERE id=?').get(user_id);
-  if (!user) return res.status(404).send('User not found');
-
-  // Deduplicate: check if this payout ref was already processed
-  const already = db.prepare("SELECT id FROM coin_log WHERE reason='workink' AND ref=?").get(offer_id+':'+payout);
-  if (already) return res.send('Already processed');
-
-  const amt = parseInt(s.workink_coins||'20', 10);
-  addCoins(user_id, amt, 'workink', `${offer_id}:${payout}`);
-  db.prepare('UPDATE users SET last_workink_claim=? WHERE id=?').run(nowISO(), user_id);
-  res.send('OK');
 });
 
-// Work.ink link redirect
-app.get('/earn/workink', ensureAuth, (req, res) => {
+// Work.ink lands the user's browser back here after they complete the link
+// (this is OUR url, embedded via the override above — not a postback Work.ink
+// calls on its own). The claim token is what proves they actually went through it.
+app.get('/earn/workink/callback', (req, res) => {
   const s = settingsObj();
-  if (!s.workink_offer_id) return res.redirect('/earn?error=' + encodeURIComponent('Work.ink not configured.'));
-  res.redirect(`https://work.ink/${s.workink_offer_id}?user_id=${encodeURIComponent(req.user.id)}`);
+  const userId = consumeEarnClaim(req.query.token, 'workink');
+  if (!userId) return res.redirect('/earn?error=' + encodeURIComponent('This Work.ink link is invalid or has expired — please try again.'));
+
+  const amt = parseInt(s.workink_coins || '20', 10);
+  addCoins(userId, amt, 'workink', req.query.token);
+  db.prepare('UPDATE users SET last_workink_claim=? WHERE id=?').run(nowISO(), userId);
+  res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
+});
+
+// Linkvertise link redirect — uses Linkvertise's "dynamic" link format
+// (https://link-to.net/<publisherId>/<points>/dynamic?r=<destination>), the
+// same redirect-completion model as Work.ink above: no shared-secret postback
+// exists here either, so the claim token is what verifies completion.
+app.get('/earn/linkvertise', ensureAuth, (req, res) => {
+  const s = settingsObj();
+  if (!s.linkvertise_publisher_id) return res.redirect('/earn?error=' + encodeURIComponent('Linkvertise not configured.'));
+
+  const token = createEarnClaim(req.user.id, 'linkvertise');
+  const destination = `${getBaseUrl(req)}/earn/linkvertise/callback?token=${token}`;
+  const points = s.linkvertise_points || '1000';
+  res.redirect(`https://link-to.net/${s.linkvertise_publisher_id}/${points}/dynamic?r=${encodeURIComponent(destination)}`);
+});
+
+app.get('/earn/linkvertise/callback', (req, res) => {
+  const s = settingsObj();
+  const userId = consumeEarnClaim(req.query.token, 'linkvertise');
+  if (!userId) return res.redirect('/earn?error=' + encodeURIComponent('This Linkvertise link is invalid or has expired — please try again.'));
+
+  const amt = parseInt(s.linkvertise_coins || '20', 10);
+  addCoins(userId, amt, 'linkvertise', req.query.token);
+  res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
 });
 
 // Notik link redirect — https://notik.me developer docs
@@ -771,7 +834,6 @@ app.get('/earn/notik/callback', async (req, res) => {
 // https://yourdomain.com/earn/paymentwall/callback
 // Paymentwall sends: uid, currency, type, ref, sign, sign_version
 app.get('/earn/paymentwall/callback', async (req, res) => {
-  const crypto = require('crypto');
   const { uid, currency, type, ref, sign, sign_version } = req.query;
   const s = settingsObj();
   if (!s.paymentwall_secret_key) return res.status(403).send('Not configured');
@@ -964,9 +1026,10 @@ app.get('/admin', ensureAdmin, (req, res) => {
 app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
   const fields = [
     'default_memory','default_disk','default_cpu','default_ports','default_databases','default_backups',
-    'daily_coins','workink_coins','workink_api_key','workink_offer_id',
+    'daily_coins','workink_coins','workink_link',
     'paymentwall_app_key','paymentwall_secret_key','paymentwall_widget','paymentwall_coins',
     'notik_api_key','notik_secret_key','notik_coins','notik_offer_url',
+    'linkvertise_publisher_id','linkvertise_points','linkvertise_coins',
     'dashboard_url','app_name','app_favicon_url',
     'renewal_enabled','renewal_price','renewal_days','renewal_grace_days',
     'queue_enabled','queue_delay_seconds','queue_max_parallel'
