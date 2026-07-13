@@ -47,6 +47,15 @@ function setSetting(key, value) {
 function nowISO()          { return new Date().toISOString(); }
 function nextBillingDate() { const d = new Date(); d.setDate(d.getDate()+30); return d.toISOString(); }
 
+/** Which payment gateways are actually configured (non-blank secrets in .env) */
+function gatewaysAvailable() {
+  const has = v => !!(v && v.trim());
+  return {
+    razorpay: has(process.env.RAZORPAY_KEY_ID) && has(process.env.RAZORPAY_KEY_SECRET),
+    paypal:   has(process.env.PAYPAL_CLIENT_ID) && has(process.env.PAYPAL_CLIENT_SECRET)
+  };
+}
+
 /** Give a new user their default resource pool based on current settings */
 function grantDefaultResources(userId) {
   const s = settingsObj();
@@ -335,10 +344,11 @@ app.get('/dashboard', ensureAuth, (req, res) => {
 });
 
 app.get('/billing', ensureAuth, (req, res) => {
-  const servers = getServersByUser.all(req.user.id);
-  const plans   = getAllPlans.all();
+  const servers  = getServersByUser.all(req.user.id);
+  const plans    = getAllPlans.all();
+  const gateways = gatewaysAvailable();
   res.render('billing', {
-    user: req.user, servers, plans, pageTitle: 'Billing',
+    user: req.user, servers, plans, gateways, pageTitle: 'Billing',
     error: req.query.error||null, success: req.query.success||null
   });
 });
@@ -901,7 +911,9 @@ app.get('/checkout/:planKey', ensureAuth, async (req, res) => {
   const plan = getPlanByKey.get(req.params.planKey);
   if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
   if (!req.user.pterodactyl_user_id) return res.redirect('/dashboard?error=Account+not+linked+to+panel.');
-  const gateway = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
+  const gateways = gatewaysAvailable();
+  const gateway  = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
+  if (!gateways[gateway]) return res.redirect('/billing?error=' + encodeURIComponent('That payment method is not available.'));
   try {
     const [rawNests, nodes] = await Promise.all([ptero.listNestsWithEggs(), ptero.listNodes()]);
     const nests = filterNestsByAllowedEggs(rawNests);
@@ -915,6 +927,7 @@ app.post('/checkout/:planKey/pay', ensureAuth, async (req, res) => {
   const plan    = getPlanByKey.get(req.params.planKey);
   if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
   const gateway = req.body.gateway === 'paypal' ? 'paypal' : 'razorpay';
+  if (!gatewaysAvailable()[gateway]) return res.redirect('/billing?error=' + encodeURIComponent('That payment method is not available.'));
   const nestId  = parseInt(req.body.nest_id,10);
   const eggId   = parseInt(req.body.egg_id, 10);
   const nodeId  = parseInt(req.body.node_id,10);
