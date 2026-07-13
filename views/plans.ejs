@@ -1,68 +1,269 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<%- include('./components/header') %>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Server Plans</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .header p {
+      font-size: 1rem;
+      color: #94a3b8;
+      margin-bottom: 5px;
+    }
+
+    .plan-count {
+      font-size: 0.875rem;
+      color: #64748b;
+      margin-top: 15px;
+    }
+
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .plan-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 16px;
+      padding: 30px;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .plan-card:hover {
+      border-color: rgba(59, 130, 246, 0.5);
+      background: rgba(30, 41, 59, 0.8);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(59, 130, 246, 0.1);
+    }
+
+    .plan-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 20px;
+    }
+
+    .plan-features {
+      list-style: none;
+      margin-bottom: 25px;
+      flex-grow: 1;
+    }
+
+    .plan-features li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+    }
+
+    .plan-features li::before {
+      content: '✓';
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .plan-price {
+      border-top: 1px solid rgba(148, 163, 184, 0.1);
+      padding-top: 20px;
+    }
+
+    .price-amount {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 5px;
+    }
+
+    .price-currency {
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+
+    .price-period {
+      font-size: 0.875rem;
+      color: #64748b;
+      margin-top: 10px;
+    }
+
+    .checkout-button {
+      display: inline-flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid transparent;
+      transition: all 0.3s ease;
+      text-align: center;
+      flex: 1;
+    }
+
+    .btn-razorpay {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-razorpay:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    .btn-paypal {
+      background: rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-paypal:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px dashed rgba(148, 163, 184, 0.2);
+      border-radius: 16px;
+      color: #94a3b8;
+    }
+
+    .empty-state p {
+      font-size: 1.125rem;
+      margin-bottom: 10px;
+    }
+
+    .info-section {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    .info-section p {
+      margin-bottom: 10px;
+    }
+
+    .info-section p:last-child {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .plans-grid {
+        gap: 20px;
+      }
+
+      .plan-card {
+        padding: 20px;
+      }
+
+      .checkout-button {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
 <body>
-<%- include('./components/sidebar', { activePage:'billing' }) %>
-
-<div class="app-main">
-
-  <!-- Page header -->
-  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
-    <div>
-      <p class="text-xs text-zinc-500"><span class="text-zinc-300 font-medium"><%= user.username %></span> / Plans</p>
-      <p class="text-xs text-zinc-600 mt-0.5">Dedicated server plans, billed monthly.</p>
-    </div>
-    <div class="flex items-center gap-x-1.5 rounded-full bg-yellow-400/10 px-3 py-2 ring-1 ring-inset ring-yellow-400/20">
-      <%- icon('coin', 'h-4 w-4 text-yellow-400') %>
-      <span class="text-xs font-semibold text-yellow-400"><%= user.coins %> coins</span>
-    </div>
-  </div>
-
-  <!-- Plans -->
-  <div class="px-4 pt-5 pb-16 sm:px-6 lg:px-8">
-    <div class="mb-5 flex items-end justify-between">
-      <div>
-        <p class="text-sm font-semibold text-white">Available Plans</p>
-        <p class="text-xs text-zinc-500 mt-0.5">Dedicated server with guaranteed resources, billed monthly.</p>
-      </div>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Dedicated Server Plans</h1>
+      <p>Reliable hosting with guaranteed resources, billed monthly</p>
       <% if (plans.length > 0) { %>
-      <span class="text-[10px] text-zinc-600"><%= plans.length %> plan<%= plans.length !== 1 ? 's' : '' %></span>
+      <div class="plan-count"><%= plans.length %> plan<%= plans.length !== 1 ? 's' : '' %> available</div>
       <% } %>
     </div>
 
+    <!-- Plans Grid -->
     <% if (plans.length === 0) { %>
-    <div class="rounded-2xl border border-dashed border-white/10 py-10 text-center">
-      <p class="text-sm text-zinc-500">No plans available yet.</p>
-      <p class="text-xs text-zinc-600 mt-1">Check back later or contact the admin.</p>
+    <div class="empty-state">
+      <p>No plans available yet</p>
+      <p style="font-size: 0.875rem;">Check back later or contact the admin</p>
     </div>
     <% } else if (!gateways.razorpay && !gateways.paypal) { %>
-    <div class="rounded-2xl border border-dashed border-white/10 py-10 text-center">
-      <p class="text-sm text-zinc-500">No payment methods configured yet.</p>
-      <p class="text-xs text-zinc-600 mt-1">Ask the admin to set up Razorpay or PayPal in .env.</p>
+    <div class="empty-state">
+      <p>No payment methods configured</p>
+      <p style="font-size: 0.875rem;">Please contact the administrator</p>
     </div>
     <% } else { %>
-    <div class="card-grid">
+    <div class="plans-grid">
       <% plans.forEach(plan => { %>
-      <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-blue-500/20 transition-colors flex flex-col">
-        <p class="text-sm font-semibold text-white mb-3"><%= plan.name %></p>
-        <ul class="space-y-1.5 text-xs text-zinc-400 mb-5 flex-1">
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.databases %> Databases / <%= plan.backups %> Backups</li>
-          <li class="flex items-center gap-x-2"><span class="h-1 w-1 rounded-full bg-blue-400 shrink-0"></span><%= plan.ports || 1 %> Port<%= (plan.ports||1) !== 1 ? 's' : '' %></li>
+      <div class="plan-card">
+        <h2 class="plan-name"><%= plan.name %></h2>
+        <ul class="plan-features">
+          <li><%= (plan.memory/1024).toFixed(1) %> GiB RAM</li>
+          <li><%= (plan.disk/1024).toFixed(0) %> GiB Disk</li>
+          <li><%= (plan.cpu/100).toFixed(1) %> CPU cores</li>
+          <li><%= plan.databases %> Database<%= plan.databases !== 1 ? 's' : '' %></li>
+          <li><%= plan.backups %> Backup<%= plan.backups !== 1 ? 's' : '' %></li>
+          <li><%= plan.ports || 1 %> Port<%= (plan.ports||1) !== 1 ? 's' : '' %></li>
         </ul>
-        <div class="flex items-end justify-between">
-          <div>
-            <p class="text-xl font-bold text-white">₹<%= (plan.price_inr/100).toFixed(0) %><span class="text-xs font-normal text-zinc-500">/mo</span></p>
-            <p class="text-xs text-zinc-600">or $<%= plan.price_usd.toFixed(2) %>/mo</p>
-          </div>
-          <div class="flex flex-col gap-y-1.5">
+        <div class="plan-price">
+          <div class="price-amount">₹<%= (plan.price_inr/100).toFixed(0) %><span class="price-currency">/mo</span></div>
+          <div class="price-period">or $<%= plan.price_usd.toFixed(2) %>/mo</div>
+          <div class="checkout-button">
             <% if (gateways.razorpay) { %>
-            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="rounded-full bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors text-center">UPI / Razorpay</a>
+            <a href="/checkout/<%= plan.key %>?gateway=razorpay" class="btn btn-razorpay">UPI / Razorpay</a>
             <% } %>
             <% if (gateways.paypal) { %>
-            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="rounded-full bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-white/10 hover:bg-white/[0.08] transition-colors text-center">PayPal</a>
+            <a href="/checkout/<%= plan.key %>?gateway=paypal" class="btn btn-paypal">PayPal</a>
             <% } %>
           </div>
         </div>
@@ -70,8 +271,12 @@
       <% }) %>
     </div>
     <% } %>
-  </div>
 
-</div><!-- /.app-main -->
+    <!-- Info Section -->
+    <div class="info-section">
+      <p>All plans include 24/7 support and automatic updates</p>
+      <p>Questions? Contact our support team</p>
+    </div>
+  </div>
 </body>
 </html>
