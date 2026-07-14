@@ -337,8 +337,12 @@ app.get('/dashboard', ensureAuth, (req, res) => {
 app.get('/billing', ensureAuth, (req, res) => {
   const servers = getServersByUser.all(req.user.id);
   const plans   = getAllPlans.all();
+  const gateways = {
+    razorpay: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    paypal: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET)
+  };
   res.render('billing', {
-    user: req.user, servers, plans, pageTitle: 'Billing',
+    user: req.user, servers, plans, gateways, pageTitle: 'Billing',
     error: req.query.error||null, success: req.query.success||null
   });
 });
