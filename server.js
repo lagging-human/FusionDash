@@ -47,15 +47,6 @@ function setSetting(key, value) {
 function nowISO()          { return new Date().toISOString(); }
 function nextBillingDate() { const d = new Date(); d.setDate(d.getDate()+30); return d.toISOString(); }
 
-/** Which payment gateways are actually configured (non-blank secrets in .env) */
-function gatewaysAvailable() {
-  const has = v => !!(v && v.trim());
-  return {
-    razorpay: has(process.env.RAZORPAY_KEY_ID) && has(process.env.RAZORPAY_KEY_SECRET),
-    paypal:   has(process.env.PAYPAL_CLIENT_ID) && has(process.env.PAYPAL_CLIENT_SECRET)
-  };
-}
-
 /** Give a new user their default resource pool based on current settings */
 function grantDefaultResources(userId) {
   const s = settingsObj();
@@ -344,19 +335,12 @@ app.get('/dashboard', ensureAuth, (req, res) => {
 });
 
 app.get('/billing', ensureAuth, (req, res) => {
-  const servers  = getServersByUser.all(req.user.id);
-  const plans    = getAllPlans.all();
-  const gateways = gatewaysAvailable();
+  const servers = getServersByUser.all(req.user.id);
+  const plans   = getAllPlans.all();
   res.render('billing', {
-    user: req.user, servers, plans, gateways, pageTitle: 'Billing',
+    user: req.user, servers, plans, pageTitle: 'Billing',
     error: req.query.error||null, success: req.query.success||null
   });
-});
-
-app.get('/plans', ensureAuth, (req, res) => {
-  const plans    = getAllPlans.all();
-  const gateways = gatewaysAvailable();
-  res.render('plans', { user: req.user, plans, gateways, pageTitle: 'Plans' });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -796,18 +780,21 @@ app.get('/earn/workink/callback', (req, res) => {
   res.redirect('/earn?success=' + encodeURIComponent(`+${amt} coins claimed!`));
 });
 
-// Linkvertise link redirect — uses Linkvertise's "dynamic" link format
-// (https://link-to.net/<publisherId>/<points>/dynamic?r=<destination>), the
-// same redirect-completion model as Work.ink above: no shared-secret postback
-// exists here either, so the claim token is what verifies completion.
+// Linkvertise link redirect — uses Linkvertise's "dynamic" link format:
+// https://link-to.net/<publisherId>/<random>/dynamic?r=<base64(encodeURI(destination))>
+// Confirmed against Linkvertise's own unminified Full Script API script — the
+// middle path segment is just a randomizer their script uses for obfuscation
+// (not a payout tier, despite how it might look), and critically, `r` must be
+// base64-encoded, not just URL-encoded — that was the actual bug here.
 app.get('/earn/linkvertise', ensureAuth, (req, res) => {
   const s = settingsObj();
   if (!s.linkvertise_publisher_id) return res.redirect('/earn?error=' + encodeURIComponent('Linkvertise not configured.'));
 
   const token = createEarnClaim(req.user.id, 'linkvertise');
   const destination = `${getBaseUrl(req)}/earn/linkvertise/callback?token=${token}`;
-  const points = s.linkvertise_points || '1000';
-  res.redirect(`https://link-to.net/${s.linkvertise_publisher_id}/${points}/dynamic?r=${encodeURIComponent(destination)}`);
+  const r = Buffer.from(encodeURI(destination), 'utf-8').toString('base64');
+  const filler = Math.floor(Math.random() * 1000);
+  res.redirect(`https://link-to.net/${s.linkvertise_publisher_id}/${filler}/dynamic?r=${encodeURIComponent(r)}`);
 });
 
 app.get('/earn/linkvertise/callback', (req, res) => {
@@ -917,9 +904,7 @@ app.get('/checkout/:planKey', ensureAuth, async (req, res) => {
   const plan = getPlanByKey.get(req.params.planKey);
   if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
   if (!req.user.pterodactyl_user_id) return res.redirect('/dashboard?error=Account+not+linked+to+panel.');
-  const gateways = gatewaysAvailable();
-  const gateway  = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
-  if (!gateways[gateway]) return res.redirect('/billing?error=' + encodeURIComponent('That payment method is not available.'));
+  const gateway = req.query.gateway === 'paypal' ? 'paypal' : 'razorpay';
   try {
     const [rawNests, nodes] = await Promise.all([ptero.listNestsWithEggs(), ptero.listNodes()]);
     const nests = filterNestsByAllowedEggs(rawNests);
@@ -933,7 +918,6 @@ app.post('/checkout/:planKey/pay', ensureAuth, async (req, res) => {
   const plan    = getPlanByKey.get(req.params.planKey);
   if (!plan) return res.redirect('/dashboard?error=Plan+not+found.');
   const gateway = req.body.gateway === 'paypal' ? 'paypal' : 'razorpay';
-  if (!gatewaysAvailable()[gateway]) return res.redirect('/billing?error=' + encodeURIComponent('That payment method is not available.'));
   const nestId  = parseInt(req.body.nest_id,10);
   const eggId   = parseInt(req.body.egg_id, 10);
   const nodeId  = parseInt(req.body.node_id,10);
@@ -1048,7 +1032,7 @@ app.post('/admin/settings/defaults', ensureAdmin, (req, res) => {
     'daily_coins','workink_coins','workink_link',
     'paymentwall_app_key','paymentwall_secret_key','paymentwall_widget','paymentwall_coins',
     'notik_api_key','notik_secret_key','notik_coins','notik_offer_url',
-    'linkvertise_publisher_id','linkvertise_points','linkvertise_coins',
+    'linkvertise_publisher_id','linkvertise_coins',
     'dashboard_url','app_name','app_favicon_url',
     'renewal_enabled','renewal_price','renewal_days','renewal_grace_days',
     'queue_enabled','queue_delay_seconds','queue_max_parallel'
