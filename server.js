@@ -932,7 +932,7 @@ app.post('/checkout/:planKey/pay', ensureAuth, async (req, res) => {
     if (gateway === 'razorpay') {
       const order = await payments.createRazorpayOrder({
         amountPaise: plan.price_inr,
-        receipt: `plan_${plan.key}_${req.user.id}_${Date.now()}`,
+        receipt: `o_${req.user.id}_${Date.now().toString(36)}`,
         notes: { user_id: req.user.id, plan_key: plan.key }
       });
       insertTransaction.run({ user_id:req.user.id, plan_key:plan.key, gateway:'razorpay', gateway_order_id:order.id, amount:plan.price_inr/100, currency:'INR', type:'new', deploy_config:deployConfig });
