@@ -55,20 +55,14 @@
           <p class="text-sm font-semibold text-white">Linkvertise</p>
           <a href="https://publisher.linkvertise.com/" target="_blank" class="ml-auto text-xs text-blue-400 hover:underline">Dashboard →</a>
         </div>
-        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Publisher ID <span class="text-zinc-700">(from your script tag, e.g. linkvertise(<strong>123456</strong>, ...))</span></label>
-            <input type="text" name="linkvertise_publisher_id" value="<%= settings.linkvertise_publisher_id || '' %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="123456">
-          </div>
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">Points Tier</label>
-            <input type="text" name="linkvertise_points" value="<%= settings.linkvertise_points || '1000' %>"
-              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm" placeholder="1000">
-          </div>
+        <div class="p-5">
+          <label class="block text-xs text-zinc-500 mb-1">Publisher ID <span class="text-zinc-700">(from your script tag, e.g. linkvertise(<strong>123456</strong>, ...))</span></label>
+          <input type="text" name="linkvertise_publisher_id" value="<%= settings.linkvertise_publisher_id || '' %>"
+            class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700/80 focus:ring-blue-400 text-sm font-mono" placeholder="123456">
         </div>
         <div class="px-5 pb-4 text-xs text-zinc-600">
-          No postback URL needed here either — Linkvertise's dynamic link format redirects straight back through <code class="text-zinc-400">/earn/linkvertise/callback</code> using the destination we pass it.
+          <p>No postback URL needed here — Linkvertise's dynamic link format redirects straight back through <code class="text-zinc-400">/earn/linkvertise/callback</code> using the destination we pass it.</p>
+          <p class="text-amber-500/80 mt-2">⚠ "Full Script API" must be turned on in your <a href="https://publisher.linkvertise.com/dashboard#dynamic" target="_blank" class="underline">Linkvertise dashboard</a> — it's off by default on new accounts, and dynamic links won't resolve until it's enabled.</p>
         </div>
       </div>
 
