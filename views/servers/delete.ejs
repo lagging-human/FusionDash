@@ -35,25 +35,27 @@
       </div>
 
       <% if (blockReason) { %>
-      <!-- Subscription lock -->
+      <!-- Paid servers can't be deleted -->
       <div class="rounded-2xl border border-amber-400/10 bg-amber-400/5 p-5">
         <div class="flex gap-x-3">
           <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" />
           </svg>
           <div>
-            <p class="text-sm font-medium text-amber-400">Deletion locked</p>
+            <p class="text-sm font-medium text-amber-400">Deletion not available</p>
             <p class="text-xs text-amber-400/70 mt-1"><%= blockReason %></p>
           </div>
         </div>
         <div class="mt-4 flex gap-x-3">
+          <% if (server.subscription_active === 1) { %>
           <form action="/servers/<%= server.id %>/cancel-subscription" method="POST">
-            <button type="submit" onclick="return confirm('Cancel your subscription? The server stays active until the billing cycle ends, then you can delete it.')"
+            <button type="submit" onclick="return confirm('Cancel your subscription? The server stays active until the billing cycle ends, then it will stop automatically.')"
               class="rounded-full bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-400/20 hover:bg-amber-400/20 transition">
-              Cancel Subscription First
+              Cancel Subscription
             </button>
           </form>
-          <a href="/dashboard" class="rounded-full bg-zinc-600/20 px-4 py-2 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/30 hover:bg-zinc-600/30 transition">Keep Server</a>
+          <% } %>
+          <a href="/dashboard" class="rounded-full bg-zinc-600/20 px-4 py-2 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-600/30 hover:bg-zinc-600/30 transition">Back to Dashboard</a>
         </div>
       </div>
 

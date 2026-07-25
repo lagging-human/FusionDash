@@ -16,6 +16,8 @@ const { audit } = require('./audit');
 const { firstRunSetup } = require('./first-run');
 const themes   = require('./themes');
 const mailer   = require('./mailer');
+const discord  = require('./discord');
+const { loginLimiter, emailSendingLimiter } = require('./rate-limit');
 const {
   normalizeEmail, validateEmailForSignup, validatePassword,
   hashPassword, generateRawToken, hashToken, generateRandomPassword
@@ -129,6 +131,15 @@ const insertLocalUser      = db.prepare(`INSERT INTO users (id, provider, userna
 const setPasswordHashStmt  = db.prepare("UPDATE users SET password_hash=?, reset_token_hash=NULL, reset_token_expires=NULL WHERE id=?");
 const setResetTokenStmt    = db.prepare('UPDATE users SET reset_token_hash=?, reset_token_expires=? WHERE id=?');
 const RESET_TOKEN_TTL_MS   = 60 * 60 * 1000; // reset links are valid for 1 hour
+
+// Email verification
+const getUserByVerifyToken = db.prepare('SELECT * FROM users WHERE verify_token_hash = ?');
+const setVerifyTokenStmt   = db.prepare('UPDATE users SET verify_token_hash=?, verify_token_expires=? WHERE id=?');
+const markEmailVerified    = db.prepare("UPDATE users SET email_verified=1, verify_token_hash=NULL, verify_token_expires=NULL WHERE id=?");
+const VERIFY_TOKEN_TTL_MS  = 24 * 60 * 60 * 1000; // verification links are valid for 24 hours
+
+// Admin broadcast — every user with a usable email
+const getAllUsersWithEmail = db.prepare("SELECT id,username,email FROM users WHERE email IS NOT NULL AND email != ''");
 
 const insertServer = db.prepare(`
   INSERT INTO servers
@@ -316,7 +327,7 @@ app.get('/login', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Local auth (email + password)
 // ─────────────────────────────────────────────────────────────────────────────
-app.post('/login', (req, res, next) => {
+app.post('/login', loginLimiter, (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.redirect('/login?error=' + encodeURIComponent(info?.message || 'Incorrect email or password.'));
@@ -333,7 +344,7 @@ app.get('/register', (req, res) => {
   res.render('register', { error: req.query.error || null, pageTitle: 'Sign Up' });
 });
 
-app.post('/register', async (req, res) => {
+app.post('/register', emailSendingLimiter, async (req, res) => {
   const username = (req.body.username || '').trim().slice(0, 32);
   const password = req.body.password || '';
   const confirmPassword = req.body.confirm_password || '';
@@ -358,10 +369,46 @@ app.post('/register', async (req, res) => {
   grantDefaultResources(id);
   try { await passport.syncPanelUser(id, email, username); } catch (err) { console.error('Panel sync failed:', err.message); }
 
+  // Best-effort notifications — never block or fail signup if these have trouble.
+  const s = settingsObj();
+  const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  if (s.email_notify_welcome === '1') {
+    mailer.sendWelcomeEmail({ to: email, username, appName: s.app_name, dashboardUrl: `${base}/dashboard` }).catch(() => {});
+  }
+  if (s.email_notify_verification === '1') {
+    const rawToken = generateRawToken();
+    setVerifyTokenStmt.run(hashToken(rawToken), new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(), id);
+    mailer.sendVerificationEmail({ to: email, username, appName: s.app_name, verifyUrl: `${base}/verify-email/${rawToken}` }).catch(() => {});
+  }
+  discord.notifyNewUser({ username, email, provider: 'local' }).catch(() => {});
+
   req.login(getUser.get(id), (err) => {
     if (err) return res.redirect('/login?success=' + encodeURIComponent('Account created — please sign in.'));
     res.redirect('/dashboard');
   });
+});
+
+app.get('/verify-email/:token', (req, res) => {
+  const user = getUserByVerifyToken.get(hashToken(req.params.token));
+  const dest = (req.isAuthenticated() && req.user) ? '/dashboard' : '/login';
+  if (!user || !user.verify_token_expires || new Date(user.verify_token_expires) < new Date()) {
+    return res.redirect(dest + '?error=' + encodeURIComponent('That verification link is invalid or has expired.'));
+  }
+  markEmailVerified.run(user.id);
+  res.redirect(dest + '?success=' + encodeURIComponent('Email verified — thanks!'));
+});
+
+app.post('/resend-verification', ensureAuth, emailSendingLimiter, (req, res) => {
+  const user = getUser.get(req.user.id);
+  if (!user.email) return res.redirect('/dashboard?error=' + encodeURIComponent('No email on file for your account.'));
+  if (user.email_verified) return res.redirect('/dashboard?success=' + encodeURIComponent('Your email is already verified.'));
+
+  const s = settingsObj();
+  const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const rawToken = generateRawToken();
+  setVerifyTokenStmt.run(hashToken(rawToken), new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(), user.id);
+  mailer.sendVerificationEmail({ to: user.email, username: user.username, appName: s.app_name, verifyUrl: `${base}/verify-email/${rawToken}` }).catch(() => {});
+  res.redirect('/dashboard?success=' + encodeURIComponent('Verification email sent.'));
 });
 
 app.get('/forgot-password', (req, res) => {
@@ -369,7 +416,7 @@ app.get('/forgot-password', (req, res) => {
   res.render('forgot-password', { error: req.query.error || null, success: req.query.success || null, pageTitle: 'Forgot Password' });
 });
 
-app.post('/forgot-password', async (req, res) => {
+app.post('/forgot-password', emailSendingLimiter, async (req, res) => {
   const email = normalizeEmail(req.body.email);
   const sentMessage = 'If an account with that email exists, a password reset link has been sent.';
   if (!email) return res.redirect('/forgot-password?error=' + encodeURIComponent('Enter your email address.'));
@@ -640,22 +687,17 @@ app.post('/servers/:id/edit', ensureAuth, async (req, res) => {
 app.get('/servers/:id/delete', ensureAuth, (req, res) => {
   const server = getServerById.get(req.params.id);
   if (!server || server.user_id !== req.user.id) return res.status(404).render('error', { message: 'Not found.' });
-  let blockReason = null;
-  if (server.plan !== 'free' && server.subscription_active === 1) {
-    const end = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
-    if (end && end > new Date()) {
-      blockReason = `Active subscription — cannot delete until ${end.toLocaleDateString('en-IN', { day:'numeric',month:'long',year:'numeric' })}.`;
-    }
-  }
+  const blockReason = server.plan !== 'free'
+    ? 'Paid servers can\'t be deleted. Cancel the subscription instead — it stays active until the end of the billing period.'
+    : null;
   res.render('servers/delete', { user: req.user, server, blockReason, pageTitle: 'Delete Server' });
 });
 
 app.post('/servers/:id/delete', ensureAuth, async (req, res) => {
   const server = getServerById.get(req.params.id);
   if (!server || server.user_id !== req.user.id) return res.status(404).render('error', { message: 'Not found.' });
-  if (server.plan !== 'free' && server.subscription_active === 1) {
-    const end = server.billing_cycle_end ? new Date(server.billing_cycle_end) : null;
-    if (end && end > new Date()) return res.redirect('/dashboard?error=' + encodeURIComponent('Cannot delete server with active subscription.'));
+  if (server.plan !== 'free') {
+    return res.redirect('/dashboard?error=' + encodeURIComponent("Paid servers can't be deleted. Cancel the subscription instead."));
   }
   try {
     await ptero.deleteServer(server.pterodactyl_server_id, true);
@@ -696,7 +738,7 @@ app.post('/servers/:id/renew', ensureAuth, async (req, res) => {
   addCoins(req.user.id, -price, 'server_renewal', `server:${server.id}`);
   const newDue = new Date();
   newDue.setDate(newDue.getDate() + days);
-  db.prepare('UPDATE servers SET renewal_due=?, renewal_suspended=0 WHERE id=?').run(newDue.toISOString(), server.id);
+  db.prepare('UPDATE servers SET renewal_due=?, renewal_suspended=0, reminder_sent=0 WHERE id=?').run(newDue.toISOString(), server.id);
 
   // Unsuspend on panel if it was suspended
   if (server.renewal_suspended === 1) {
@@ -758,6 +800,57 @@ app.post('/internal/process-renewals', async (req, res) => {
       } catch (err) {
         results.push({ id: server.id, action: 'suspend_failed', error: err.message });
       }
+    }
+  }
+
+  res.json({ processed: results.length, results });
+});
+
+// Email/Discord reminders for things coming due soon — call via cron, same as above.
+// e.g. */30 * * * * curl -sX POST http://localhost:3000/internal/send-reminders
+app.post('/internal/send-reminders', async (req, res) => {
+  const s = settingsObj();
+  const leadDays = parseInt(s.reminder_lead_days || '3', 10);
+  const now = new Date();
+  const cutoff = new Date(now.getTime() + leadDays * 86400000).toISOString();
+  const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const results = [];
+
+  // Free servers whose renewal is coming up
+  if (s.renewal_enabled === '1' && s.email_notify_sub_ending === '1') {
+    const dueSoon = db.prepare(`
+      SELECT s.*, u.email, u.username FROM servers s JOIN users u ON s.user_id = u.id
+      WHERE s.plan = 'free' AND s.renewal_due IS NOT NULL AND s.renewal_due <= ? AND s.renewal_due > ?
+        AND s.renewal_suspended = 0 AND s.reminder_sent = 0 AND u.email IS NOT NULL AND u.email != ''
+    `).all(cutoff, now.toISOString());
+    for (const server of dueSoon) {
+      const daysLeft = Math.max(0, Math.ceil((new Date(server.renewal_due) - now) / 86400000));
+      const result = await mailer.sendSubscriptionEndingEmail({
+        to: server.email, username: server.username, serverName: server.name, daysLeft,
+        renewUrl: `${base}/servers`, appName: s.app_name
+      });
+      if (result.ok) db.prepare('UPDATE servers SET reminder_sent=1 WHERE id=?').run(server.id);
+      results.push({ id: server.id, type: 'free_renewal', sent: result.ok });
+    }
+  }
+
+  // Paid servers whose subscription is coming up for expiry
+  if (s.email_notify_sub_ending === '1') {
+    const dueSoon = db.prepare(`
+      SELECT s.*, u.email, u.username FROM servers s JOIN users u ON s.user_id = u.id
+      WHERE s.plan != 'free' AND s.subscription_active = 1 AND s.billing_cycle_end IS NOT NULL
+        AND s.billing_cycle_end <= ? AND s.billing_cycle_end > ?
+        AND s.reminder_sent = 0 AND u.email IS NOT NULL AND u.email != ''
+    `).all(cutoff, now.toISOString());
+    for (const server of dueSoon) {
+      const daysLeft = Math.max(0, Math.ceil((new Date(server.billing_cycle_end) - now) / 86400000));
+      const result = await mailer.sendSubscriptionEndingEmail({
+        to: server.email, username: server.username, serverName: server.name, daysLeft,
+        renewUrl: `${base}/servers`, appName: s.app_name
+      });
+      if (result.ok) db.prepare('UPDATE servers SET reminder_sent=1 WHERE id=?').run(server.id);
+      discord.notifySubscriptionEnding({ username: server.username, serverName: server.name, daysLeft }).catch(() => {});
+      results.push({ id: server.id, type: 'paid_subscription', sent: result.ok });
     }
   }
 
@@ -1100,7 +1193,19 @@ async function fulfillPaidTransaction(tx) {
     name:cfg.name, description:desc, plan:plan.key, egg_id:cfg.egg_id, nest_id:cfg.nest_id, node_id:cfg.node_id,
     ...specs, subscription_active:1, subscription_gateway:tx.gateway, billing_cycle_start:now, billing_cycle_end:next
   });
-  return db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
+  const server = db.prepare('SELECT * FROM servers WHERE pterodactyl_server_id=?').get(result.attributes.id);
+
+  // Best-effort notifications — a failure here must never affect the paid fulfillment above.
+  if (s.email_notify_payment === '1') {
+    const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    mailer.sendPaymentReceivedEmail({
+      to: user.email, username: user.username, planName: plan.name, serverName: cfg.name,
+      amount: tx.amount, currency: tx.currency, appName: s.app_name, dashboardUrl: `${base}/servers`
+    }).catch(() => {});
+  }
+  discord.notifyNewPayment({ username: user.username, planName: plan.name, amount: tx.amount, currency: tx.currency, gateway: tx.gateway }).catch(() => {});
+
+  return server;
 }
 
 app.post('/checkout/razorpay/verify', ensureAuth, async (req, res) => {
@@ -1161,6 +1266,7 @@ app.get('/admin', ensureAdmin, (req, res) => {
   res.render('admin/index', {
     user:req.user, settings:settingsObj(), pageTitle: 'Admin',
     userCount, serverCount, paidTxnCount, smtpConfigured: mailer.isConfigured(),
+    webhooks: discord.listWebhooks(),
     error:req.query.error||null, success:req.query.success||null
   });
 });
@@ -1241,6 +1347,7 @@ app.post('/admin/users/new', ensureAdmin, async (req, res) => {
 
   const id = `local:${crypto.randomUUID()}`;
   insertLocalUser.run({ id, username, email, password_hash: await hashPassword(password) });
+  markEmailVerified.run(id); // admin typed this email in themselves — no need to make them verify it
   if (isAdminFlag) db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(id);
   grantDefaultResources(id);
   try { await passport.syncPanelUser(id, email, username); } catch (err) { console.error('Panel sync failed:', err.message); }
@@ -1250,9 +1357,105 @@ app.post('/admin/users/new', ensureAdmin, async (req, res) => {
     const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
     mailer.sendNewAccountEmail({ to: email, username, password, appName: s.app_name, loginUrl: `${base}/login` }).catch(() => {});
   }
+  discord.notifyNewUser({ username, email, provider: 'admin-created' }).catch(() => {});
 
   audit(req.user, 'user.create', { type:'user', id, name:username }, { email, is_admin: isAdminFlag, emailed: sendEmail }, req.ip);
   res.redirect('/admin/users?success=' + encodeURIComponent(`User "${username}" created.`));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Email broadcast
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/admin/email', ensureAdmin, (req, res) => {
+  const recipientCount = getAllUsersWithEmail.all().length;
+  res.render('admin/email', {
+    user: req.user, recipientCount, usage: mailer.getUsageToday(), smtpConfigured: mailer.isConfigured(),
+    pageTitle: 'Admin — Email',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+app.post('/admin/email', ensureAdmin, (req, res) => {
+  if (!mailer.isConfigured()) return res.redirect('/admin/email?error=' + encodeURIComponent('SMTP is not configured.'));
+
+  const subject = (req.body.subject || '').trim().slice(0, 200);
+  const body    = (req.body.body || '').trim();
+  if (!subject || !body) return res.redirect('/admin/email?error=' + encodeURIComponent('Subject and message are required.'));
+
+  const recipients = getAllUsersWithEmail.all();
+  if (recipients.length === 0) return res.redirect('/admin/email?error=' + encodeURIComponent('No users with an email on file.'));
+
+  const usage = mailer.getUsageToday();
+  const s = settingsObj();
+
+  audit(req.user, 'email.broadcast', { type:'broadcast', id:'all', name: subject }, { recipients: recipients.length }, req.ip);
+  discord.notifyAdminBroadcast({ adminUsername: req.user.username, subject, recipientCount: recipients.length }).catch(() => {});
+
+  // Send in the background — a broadcast to hundreds of users must not hold the request open.
+  (async () => {
+    const escapedBodyHtml = String(body).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])).replace(/\n/g, '<br>');
+    let sent = 0, skipped = 0;
+    for (const r of recipients) {
+      const result = await mailer.sendBroadcastEmail({ to: r.email, username: r.username, subject, bodyHtml: escapedBodyHtml, bodyText: body, appName: s.app_name });
+      if (result.ok) sent++; else skipped++;
+      if (!result.ok && result.error === 'Daily email limit reached.') break;
+      await new Promise(r => setTimeout(r, 250)); // gentle pacing so we don't hammer the SMTP relay
+    }
+    console.log(`[admin email] broadcast "${subject}" — sent ${sent}, skipped ${skipped}`);
+  })();
+
+  res.redirect('/admin/email?success=' + encodeURIComponent(
+    `Sending to ${recipients.length} user(s) in the background` +
+    (recipients.length > usage.remaining ? ` — heads up, only ${usage.remaining} sends remain in today's quota` : '') + '.'
+  ));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Discord webhooks & notification toggles
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/admin/webhooks', ensureAdmin, (req, res) => {
+  const result = discord.addWebhook(req.body.url, req.body.label);
+  if (!result.ok) return res.redirect('/admin?error=' + encodeURIComponent(result.error));
+  audit(req.user, 'webhook.create', { type:'webhook', id:result.id, name:req.body.label||'' }, {}, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent('Webhook added.'));
+});
+
+app.post('/admin/webhooks/:id/delete', ensureAdmin, (req, res) => {
+  discord.removeWebhook(req.params.id);
+  audit(req.user, 'webhook.delete', { type:'webhook', id:req.params.id, name:'' }, {}, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent('Webhook removed.'));
+});
+
+app.post('/admin/webhooks/:id/toggle', ensureAdmin, (req, res) => {
+  discord.setWebhookEnabled(req.params.id, req.body.enabled === '1');
+  res.redirect('/admin?success=' + encodeURIComponent('Webhook updated.'));
+});
+
+app.post('/admin/webhooks/:id/test', ensureAdmin, async (req, res) => {
+  const hook = discord.listWebhooks().find(h => String(h.id) === String(req.params.id));
+  if (!hook) return res.redirect('/admin?error=' + encodeURIComponent('Webhook not found.'));
+  const result = await discord.sendTest(hook.url);
+  res.redirect('/admin?' + (result.ok ? 'success=' + encodeURIComponent('Test notification sent — check Discord.') : 'error=' + encodeURIComponent('Test failed: ' + result.error)));
+});
+
+app.post('/admin/notifications', ensureAdmin, (req, res) => {
+  const discordToggles = ['discord_notify_new_user','discord_notify_new_payment','discord_notify_sub_ending','discord_notify_admin_alerts'];
+  for (const t of discordToggles) setSetting(t, req.body[t] === '1' ? '1' : '0');
+
+  const emailToggles = ['email_notify_welcome','email_notify_verification','email_notify_payment','email_notify_sub_ending'];
+  for (const t of emailToggles) setSetting(t, req.body[t] === '1' ? '1' : '0');
+
+  if (req.body.smtp_daily_limit !== undefined) {
+    const n = parseInt(req.body.smtp_daily_limit, 10);
+    setSetting('smtp_daily_limit', Number.isFinite(n) && n > 0 ? String(n) : '300');
+  }
+  if (req.body.reminder_lead_days !== undefined) {
+    const n = parseInt(req.body.reminder_lead_days, 10);
+    setSetting('reminder_lead_days', Number.isFinite(n) && n > 0 ? String(n) : '3');
+  }
+
+  audit(req.user, 'settings.update', { type:'settings', id:'notifications', name:'Notification Settings' }, {}, req.ip);
+  res.redirect('/admin?success=' + encodeURIComponent('Notification settings updated.'));
 });
 
 // Dedicated /admin/transactions page

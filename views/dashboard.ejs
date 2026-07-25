@@ -19,6 +19,15 @@
     <p class="text-sm text-green-300"><%= success %></p>
   </div>
   <% } %>
+  <% if (user.provider === 'local' && !user.email_verified) { %>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-blue-500/20 bg-blue-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.909a2.25 2.25 0 0 1-1.07-1.916V6.75"/></svg>
+    <p class="text-sm text-blue-300">Please verify your email address (<%= user.email %>).</p>
+    <form action="/resend-verification" method="POST" class="ml-auto">
+      <button type="submit" class="text-xs font-medium text-blue-300 underline hover:text-blue-200 transition-colors">Resend verification email</button>
+    </form>
+  </div>
+  <% } %>
 
   <!-- Page header -->
   <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">

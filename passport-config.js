@@ -9,12 +9,13 @@ const { normalizeEmail, verifyPassword } = require('./auth-utils');
 const getUserStmt = db.prepare('SELECT * FROM users WHERE id = ?');
 const getUserByLocalEmailStmt = db.prepare("SELECT * FROM users WHERE provider='local' AND email = ?");
 const upsertUserStmt = db.prepare(`
-  INSERT INTO users (id, provider, username, email, avatar)
-  VALUES (@id, @provider, @username, @email, @avatar)
+  INSERT INTO users (id, provider, username, email, avatar, email_verified)
+  VALUES (@id, @provider, @username, @email, @avatar, 1)
   ON CONFLICT(id) DO UPDATE SET
     username = @username,
     email    = @email,
-    avatar   = @avatar
+    avatar   = @avatar,
+    email_verified = 1
 `);
 const setPanelLinkStmt = db.prepare(
   'UPDATE users SET pterodactyl_user_id = ?, is_admin = ? WHERE id = ?'

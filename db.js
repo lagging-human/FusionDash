@@ -234,6 +234,17 @@ const migrations = [
   `ALTER TABLE users ADD COLUMN password_hash TEXT`,
   `ALTER TABLE users ADD COLUMN reset_token_hash TEXT`,
   `ALTER TABLE users ADD COLUMN reset_token_expires TEXT`,
+  `ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN verify_token_hash TEXT`,
+  `ALTER TABLE users ADD COLUMN verify_token_expires TEXT`,
+  `ALTER TABLE servers ADD COLUMN reminder_sent INTEGER DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS webhooks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    label      TEXT,
+    url        TEXT NOT NULL,
+    enabled    INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 
@@ -290,6 +301,20 @@ const defaultSettings = {
   stat_show_paid_servers:     '1',
   stat_show_admins:           '1',
   stat_show_revenue:          '1',
+  // Discord webhook notifications — which events get posted
+  discord_notify_new_user:      '1',
+  discord_notify_new_payment:   '1',
+  discord_notify_sub_ending:    '1',
+  discord_notify_admin_alerts:  '1',
+  // Email notification toggles
+  email_notify_welcome:       '1',
+  email_notify_verification:  '1',
+  email_notify_payment:       '1',
+  email_notify_sub_ending:    '1',
+  // SMTP daily send cap — protects a shared inbox's daily sending quota from being exhausted by abuse
+  smtp_daily_limit:           '300',
+  // How many days before renewal/subscription end to send a reminder email
+  reminder_lead_days:         '3',
 };
 const ins = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)');
 for (const [k,v] of Object.entries(defaultSettings)) ins.run(k, v);
