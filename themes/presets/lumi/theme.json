@@ -1,0 +1,19 @@
+{
+  "name": "Lumi",
+  "palette": {
+    "pageBackground": "#0d0d0d",
+    "bodyText": "#ededed",
+    "neutral": { "950": "#080808", "900": "#141414", "800": "#1f1f1f", "700": "#2e2e2e", "600": "#404040", "500": "#707070", "400": "#a0a0a0", "300": "#d4d4d4" },
+    "accent":  { "300": "#d4d4d4", "400": "#e8e8e8", "500": "#ffffff", "600": "#c0c0c0" }
+  },
+  "typography": {
+    "fontFamily": "'Geist', 'Inter', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "15px"
+  },
+  "layout": { "radiusScale": 0.7, "cardShadow": "0 0 0 1px rgba(255,255,255,.08),0 2px 8px rgba(0,0,0,.6)" },
+  "animations": { "enabled": true, "speed": "0.15s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

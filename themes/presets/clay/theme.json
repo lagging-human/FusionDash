@@ -1,0 +1,19 @@
+{
+  "name": "Clay",
+  "palette": {
+    "pageBackground": "#f7f4f0",
+    "bodyText": "#1a1714",
+    "neutral": { "950": "#ffffff", "900": "#f7f4f0", "800": "#ede9e2", "700": "#ddd8cf", "600": "#b8b0a4", "500": "#7a7268", "400": "#4a4440", "300": "#1a1714" },
+    "accent":  { "300": "#fbbf8a", "400": "#f97b3c", "500": "#e85d20", "600": "#c94410" }
+  },
+  "typography": {
+    "fontFamily": "'Lora', 'Georgia', serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1.8, "cardShadow": "0 1px 4px rgba(30,20,10,.07),0 0 0 1px rgba(30,20,10,.05)" },
+  "animations": { "enabled": true, "speed": "0.22s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

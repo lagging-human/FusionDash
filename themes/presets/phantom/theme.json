@@ -1,0 +1,19 @@
+{
+  "name": "Phantom",
+  "palette": {
+    "pageBackground": "#080810",
+    "bodyText": "#e8e8f0",
+    "neutral": { "950": "#06060e", "900": "#0f0f1a", "800": "#17172a", "700": "#22223a", "600": "#32325a", "500": "#5a5a82", "400": "#9090b8", "300": "#c8c8e0" },
+    "accent":  { "300": "#c4a8ff", "400": "#a070f0", "500": "#8040e8", "600": "#6020cc" }
+  },
+  "typography": {
+    "fontFamily": "'Plus Jakarta Sans', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 1.4, "cardShadow": "0 4px 24px rgba(80,0,200,.15),0 0 0 1px rgba(160,112,240,.12)" },
+  "animations": { "enabled": true, "speed": "0.25s", "style": "spring", "cardHover": true, "buttonTransition": true, "glowAccent": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": "body{background:radial-gradient(ellipse at 30% 0%,#12082a 0%,#080810 55%)}.rounded-2xl,.rounded-xl{border:1px solid rgba(128,64,232,.18) !important}"
+}

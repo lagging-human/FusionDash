@@ -1,0 +1,19 @@
+{
+  "name": "Neon Frost",
+  "palette": {
+    "pageBackground": "#020b12",
+    "bodyText": "#cff4fc",
+    "neutral": { "950": "#010810", "900": "#041220", "800": "#082030", "700": "#0e3045", "600": "#174560", "500": "#2a6888", "400": "#5098b8", "300": "#90cce0" },
+    "accent":  { "300": "#80ffee", "400": "#00e5cc", "500": "#00c8b4", "600": "#00a898" }
+  },
+  "typography": {
+    "fontFamily": "'JetBrains Mono', 'Fira Code', monospace",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "15px"
+  },
+  "layout": { "radiusScale": 0.5, "cardShadow": "0 0 0 1px rgba(0,200,180,.2),0 4px 20px rgba(0,180,160,.08),inset 0 1px 0 rgba(0,255,220,.05)" },
+  "animations": { "enabled": true, "speed": "0.2s", "style": "slide", "cardHover": true, "buttonTransition": true, "glowAccent": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": "body{background:radial-gradient(ellipse at 50% 0%,#021a28 0%,#020b12 60%)}.rounded-2xl,.rounded-xl{border:1px solid rgba(0,200,180,.15) !important}"
+}

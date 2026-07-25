@@ -1786,7 +1786,7 @@ app.post('/admin/themes/:slug/update', ensureAdmin, (req, res) => {
       },
       animations: {
         enabled: b.animEnabled === 'on', speed: b.animSpeed || '0.18s', style: b.animStyle || 'fade',
-        cardHover: b.cardHover === 'on', buttonTransition: b.buttonTransition === 'on',
+        cardHover: b.cardHover === 'on', buttonTransition: b.buttonTransition === 'on', glowAccent: b.glowAccent === 'on',
       },
       customCss: b.customCss || '',
     };

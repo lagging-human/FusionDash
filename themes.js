@@ -49,9 +49,10 @@ const DEFAULT_THEME = {
   animations: {
     enabled: true,
     speed: '0.18s',
-    style: 'fade',        // fade | slide | none
+    style: 'fade',        // fade | slide | zoom | blur | spring | none
     cardHover: false,
     buttonTransition: true,
+    glowAccent: false,    // pulse glow on accent-colored elements
   },
   images: {
     logoUrl: null,
@@ -213,17 +214,35 @@ function generateCSS(theme) {
 
   // Animations
   if (a.enabled && a.style !== 'none') {
-    const from = a.style === 'slide' ? 'opacity:0;transform:translateY(14px)' : 'opacity:0;transform:translateY(4px)';
-    rules.push(`@keyframes fdFadeIn{from{${from}}to{opacity:1;transform:none}}`);
-    rules.push(`main{animation:fdFadeIn var(--fd-speed) ease;}`);
+    let fromState = 'opacity:0;transform:translateY(4px)'; // fade (default)
+    let toState   = 'opacity:1;transform:none';
+    let easing    = 'ease';
+    if (a.style === 'slide') {
+      fromState = 'opacity:0;transform:translateY(14px)';
+    } else if (a.style === 'zoom') {
+      fromState = 'opacity:0;transform:scale(0.97)';
+    } else if (a.style === 'blur') {
+      fromState = 'opacity:0;filter:blur(6px);transform:translateY(4px)';
+      toState   = 'opacity:1;filter:blur(0);transform:none';
+    } else if (a.style === 'spring') {
+      fromState = 'opacity:0;transform:scale(0.95) translateY(8px)';
+      easing    = 'cubic-bezier(0.34,1.56,0.64,1)';
+    }
+    rules.push(`@keyframes fdFadeIn{from{${fromState}}to{${toState}}}`);
+    rules.push(`main{animation:fdFadeIn var(--fd-speed) ${easing};}`);
   } else {
     rules.push(`main{animation:none;}`);
   }
   if (a.buttonTransition) {
-    rules.push(`button,a.tab-btn,input,select,textarea{transition:background-color var(--fd-speed) ease,color var(--fd-speed) ease,border-color var(--fd-speed) ease,transform var(--fd-speed) ease;}`);
+    rules.push(`button,a.tab-btn,input,select,textarea{transition:background-color var(--fd-speed) ease,color var(--fd-speed) ease,border-color var(--fd-speed) ease,transform var(--fd-speed) ease,box-shadow var(--fd-speed) ease;}`);
   }
   if (a.cardHover) {
     rules.push(`.rounded-2xl:hover,.rounded-xl:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.35);}`);
+  }
+  if (a.glowAccent) {
+    rules.push(`@keyframes fdGlow{0%,100%{box-shadow:0 0 0 0 var(--fd-a500,#3b82f6)}50%{box-shadow:0 0 12px 3px var(--fd-a500,#3b82f6)}}`);
+    rules.push(`:root{--fd-a500:${p.accent['500']};}`);
+    rules.push(`button.bg-blue-500,button.bg-blue-400,.bg-blue-500{animation:fdGlow 2.8s ease-in-out infinite;}`);
   }
 
   // Images

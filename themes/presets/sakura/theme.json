@@ -1,0 +1,19 @@
+{
+  "name": "Sakura",
+  "palette": {
+    "pageBackground": "#100810",
+    "bodyText": "#f5e8f0",
+    "neutral": { "950": "#0c060c", "900": "#180e18", "800": "#241824", "700": "#342634", "600": "#4a384a", "500": "#7a5e7a", "400": "#b090b0", "300": "#e0c8e0" },
+    "accent":  { "300": "#ffb8d0", "400": "#ff85aa", "500": "#ff5588", "600": "#e03870" }
+  },
+  "typography": {
+    "fontFamily": "'Noto Sans JP', 'DM Sans', system-ui, sans-serif",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px"
+  },
+  "layout": { "radiusScale": 2.0, "cardShadow": "0 4px 24px rgba(180,0,80,.1),0 0 0 1px rgba(255,100,160,.1)" },
+  "animations": { "enabled": true, "speed": "0.28s", "style": "zoom", "cardHover": true, "buttonTransition": true, "glowAccent": true },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": "body{background:radial-gradient(ellipse at 70% 0%,#200820 0%,#100810 60%)}.rounded-2xl,.rounded-xl{border:1px solid rgba(255,85,136,.12) !important}"
+}
