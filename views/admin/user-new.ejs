@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'admin' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500"><a href="/admin" class="hover:text-zinc-300 transition-colors">Admin</a> <span class="text-zinc-700">/</span> <a href="/admin/users" class="hover:text-zinc-300 transition-colors">Users</a> <span class="text-zinc-700">/ New</span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">New User</p>
+    </div>
+    <a href="/admin/users" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">&larr; Back to Users</a>
+  </div>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-5 max-w-2xl">
+    <form action="/admin/users/new" method="POST" class="space-y-5">
+
+      <!-- Account details -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('user', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Account Details</p>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Username</label>
+            <input type="text" name="username" maxlength="32" required
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm" placeholder="janedoe">
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Email</label>
+            <input type="email" name="email" required
+              class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm" placeholder="jane@example.com">
+            <p class="mt-1 text-xs text-zinc-600">No '+' aliases (e.g. name+tag@gmail.com) — one account per inbox.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Password</label>
+            <div class="flex gap-x-2">
+              <input type="text" name="password" id="passwordField" minlength="8" required
+                class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono" placeholder="At least 8 characters">
+              <button type="button" onclick="generatePassword()"
+                class="shrink-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Generate</button>
+            </div>
+            <p class="mt-1 text-xs text-zinc-600">Visible so you can share it with the user. They can change it after signing in.</p>
+          </div>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none">
+            <div class="relative">
+              <input type="checkbox" name="is_admin" value="1" id="isAdminToggle" class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Grant admin access</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Notify -->
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('mail', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Notify User</p>
+        </div>
+        <div class="p-5">
+          <% if (smtpConfigured) { %>
+          <label class="flex items-center gap-x-3 cursor-pointer select-none">
+            <div class="relative">
+              <input type="checkbox" name="send_email" value="1" id="sendEmailToggle" checked class="sr-only peer">
+              <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+            </div>
+            <span class="text-sm text-zinc-300">Email the login details to this user</span>
+          </label>
+          <% } else { %>
+          <p class="text-xs text-zinc-600">
+            SMTP isn't configured, so this user won't be emailed automatically — share the password above with them directly.
+            Set <code class="text-zinc-400">SMTP_HOST</code>, <code class="text-zinc-400">SMTP_PORT</code>, <code class="text-zinc-400">SMTP_USER</code> and
+            <code class="text-zinc-400">SMTP_PASS</code> in <code class="text-zinc-400">.env</code> to enable this.
+          </p>
+          <% } %>
+        </div>
+      </div>
+
+      <button type="submit" class="rounded-full bg-blue-500/15 px-6 py-2 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+        Create User
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+function generatePassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let pw = '';
+  for (let i = 0; i < 14; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('passwordField').value = pw + '#9';
+}
+</script>
+</body>
+</html>

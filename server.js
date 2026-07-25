@@ -15,6 +15,11 @@ const { startQueue, enqueue, getUserQueueStatus, getQueueInfo, getPositionForJob
 const { audit } = require('./audit');
 const { firstRunSetup } = require('./first-run');
 const themes   = require('./themes');
+const mailer   = require('./mailer');
+const {
+  normalizeEmail, validateEmailForSignup, validatePassword,
+  hashPassword, generateRawToken, hashToken, generateRandomPassword
+} = require('./auth-utils');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -116,6 +121,14 @@ const getAllUsers        = db.prepare('SELECT * FROM users ORDER BY created_at D
 const getStoreItems     = db.prepare('SELECT * FROM store_items WHERE active=1');
 const getAllStoreItems   = db.prepare('SELECT * FROM store_items');
 const getAllServersAdmin = db.prepare(`SELECT s.*,u.username,u.email FROM servers s JOIN users u ON s.user_id=u.id ORDER BY s.id DESC`);
+
+// Local (email/password) auth
+const getUserByLocalEmail  = db.prepare("SELECT * FROM users WHERE provider='local' AND email = ?");
+const getUserByResetToken  = db.prepare('SELECT * FROM users WHERE reset_token_hash = ?');
+const insertLocalUser      = db.prepare(`INSERT INTO users (id, provider, username, email, password_hash) VALUES (@id, 'local', @username, @email, @password_hash)`);
+const setPasswordHashStmt  = db.prepare("UPDATE users SET password_hash=?, reset_token_hash=NULL, reset_token_expires=NULL WHERE id=?");
+const setResetTokenStmt    = db.prepare('UPDATE users SET reset_token_hash=?, reset_token_expires=? WHERE id=?');
+const RESET_TOKEN_TTL_MS   = 60 * 60 * 1000; // reset links are valid for 1 hour
 
 const insertServer = db.prepare(`
   INSERT INTO servers
@@ -297,7 +310,108 @@ app.get('/api/nodes', (req, res) => {
 
 app.get('/login', (req, res) => {
   if (req.isAuthenticated()) return res.redirect('/dashboard');
-  res.render('login', { error: req.query.error || null, pageTitle: 'Login' });
+  res.render('login', { error: req.query.error || null, success: req.query.success || null, pageTitle: 'Login' });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local auth (email + password)
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) return next(err);
+    if (!user) return res.redirect('/login?error=' + encodeURIComponent(info?.message || 'Incorrect email or password.'));
+    req.login(user, (err) => {
+      if (err) return next(err);
+      grantDefaultResources(user.id);
+      res.redirect('/dashboard');
+    });
+  })(req, res, next);
+});
+
+app.get('/register', (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/dashboard');
+  res.render('register', { error: req.query.error || null, pageTitle: 'Sign Up' });
+});
+
+app.post('/register', async (req, res) => {
+  const username = (req.body.username || '').trim().slice(0, 32);
+  const password = req.body.password || '';
+  const confirmPassword = req.body.confirm_password || '';
+
+  const emailCheck = validateEmailForSignup(req.body.email);
+  if (!emailCheck.ok) return res.redirect('/register?error=' + encodeURIComponent(emailCheck.message));
+  const email = emailCheck.email;
+
+  if (!username) return res.redirect('/register?error=' + encodeURIComponent('Username is required.'));
+
+  const passwordCheck = validatePassword(password);
+  if (!passwordCheck.ok) return res.redirect('/register?error=' + encodeURIComponent(passwordCheck.message));
+  if (password !== confirmPassword) return res.redirect('/register?error=' + encodeURIComponent('Passwords do not match.'));
+
+  if (getUserByLocalEmail.get(email)) {
+    return res.redirect('/register?error=' + encodeURIComponent('An account with this email already exists.'));
+  }
+
+  const id = `local:${crypto.randomUUID()}`;
+  const password_hash = await hashPassword(password);
+  insertLocalUser.run({ id, username, email, password_hash });
+  grantDefaultResources(id);
+  try { await passport.syncPanelUser(id, email, username); } catch (err) { console.error('Panel sync failed:', err.message); }
+
+  req.login(getUser.get(id), (err) => {
+    if (err) return res.redirect('/login?success=' + encodeURIComponent('Account created — please sign in.'));
+    res.redirect('/dashboard');
+  });
+});
+
+app.get('/forgot-password', (req, res) => {
+  if (req.isAuthenticated()) return res.redirect('/dashboard');
+  res.render('forgot-password', { error: req.query.error || null, success: req.query.success || null, pageTitle: 'Forgot Password' });
+});
+
+app.post('/forgot-password', async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const sentMessage = 'If an account with that email exists, a password reset link has been sent.';
+  if (!email) return res.redirect('/forgot-password?error=' + encodeURIComponent('Enter your email address.'));
+
+  const user = getUserByLocalEmail.get(email);
+  if (user) {
+    const rawToken = generateRawToken();
+    setResetTokenStmt.run(hashToken(rawToken), new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString(), user.id);
+
+    const s = settingsObj();
+    const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    mailer.sendPasswordResetEmail({
+      to: user.email, username: user.username, appName: s.app_name,
+      resetUrl: `${base}/reset-password/${rawToken}`
+    }).catch(() => {});
+  }
+  // Same message whether or not the email matched — avoids revealing which emails have accounts.
+  res.redirect('/forgot-password?success=' + encodeURIComponent(sentMessage));
+});
+
+app.get('/reset-password/:token', (req, res) => {
+  const user = getUserByResetToken.get(hashToken(req.params.token));
+  if (!user || !user.reset_token_expires || new Date(user.reset_token_expires) < new Date()) {
+    return res.redirect('/forgot-password?error=' + encodeURIComponent('That reset link is invalid or has expired.'));
+  }
+  res.render('reset-password', { token: req.params.token, error: req.query.error || null, pageTitle: 'Reset Password' });
+});
+
+app.post('/reset-password/:token', async (req, res) => {
+  const user = getUserByResetToken.get(hashToken(req.params.token));
+  if (!user || !user.reset_token_expires || new Date(user.reset_token_expires) < new Date()) {
+    return res.redirect('/forgot-password?error=' + encodeURIComponent('That reset link is invalid or has expired.'));
+  }
+
+  const password = req.body.password || '';
+  const confirmPassword = req.body.confirm_password || '';
+  const passwordCheck = validatePassword(password);
+  if (!passwordCheck.ok) return res.redirect(`/reset-password/${req.params.token}?error=` + encodeURIComponent(passwordCheck.message));
+  if (password !== confirmPassword) return res.redirect(`/reset-password/${req.params.token}?error=` + encodeURIComponent('Passwords do not match.'));
+
+  setPasswordHashStmt.run(await hashPassword(password), user.id);
+  res.redirect('/login?success=' + encodeURIComponent('Password reset. You can now sign in.'));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,6 +457,27 @@ app.get('/billing', ensureAuth, (req, res) => {
   };
   res.render('billing', {
     user: req.user, servers, plans, gateways, pageTitle: 'Billing',
+    error: req.query.error||null, success: req.query.success||null
+  });
+});
+
+// All of a user's servers — free and paid — in one place.
+app.get('/servers', ensureAuth, (req, res) => {
+  const servers = getServersByUser.all(req.user.id);
+  const settings = settingsObj();
+  const renewal = {
+    enabled:    settings.renewal_enabled     === '1',
+    price:      parseInt(settings.renewal_price      || '5',  10),
+    days:       parseInt(settings.renewal_days       || '30', 10),
+    graceDays:  parseInt(settings.renewal_grace_days || '1',  10),
+  };
+  res.render('servers/index', {
+    user: req.user,
+    servers,
+    freeServers: servers.filter(srv => srv.plan === 'free'),
+    paidServers: servers.filter(srv => srv.plan !== 'free'),
+    renewal,
+    pageTitle: 'My Servers',
     error: req.query.error||null, success: req.query.success||null
   });
 });
@@ -1025,7 +1160,7 @@ app.get('/admin', ensureAdmin, (req, res) => {
   const paidTxnCount = db.prepare(`SELECT COUNT(*) as n FROM transactions WHERE status='paid'`).get().n;
   res.render('admin/index', {
     user:req.user, settings:settingsObj(), pageTitle: 'Admin',
-    userCount, serverCount, paidTxnCount,
+    userCount, serverCount, paidTxnCount, smtpConfigured: mailer.isConfigured(),
     error:req.query.error||null, success:req.query.success||null
   });
 });
@@ -1076,6 +1211,48 @@ app.get('/admin/users', ensureAdmin, (req, res) => {
     user: req.user, users: getAllUsers.all(), pageTitle: 'Admin — Users',
     error: req.query.error||null, success: req.query.success||null
   });
+});
+
+app.get('/admin/users/new', ensureAdmin, (req, res) => {
+  res.render('admin/user-new', {
+    user: req.user, smtpConfigured: mailer.isConfigured(), pageTitle: 'Admin — New User',
+    error: req.query.error||null
+  });
+});
+
+app.post('/admin/users/new', ensureAdmin, async (req, res) => {
+  const username    = (req.body.username || '').trim().slice(0, 32);
+  const isAdminFlag = req.body.is_admin === '1' ? 1 : 0;
+  const sendEmail   = req.body.send_email === '1' && mailer.isConfigured();
+
+  const emailCheck = validateEmailForSignup(req.body.email);
+  if (!emailCheck.ok) return res.redirect('/admin/users/new?error=' + encodeURIComponent(emailCheck.message));
+  const email = emailCheck.email;
+
+  if (!username) return res.redirect('/admin/users/new?error=' + encodeURIComponent('Username is required.'));
+
+  const password = req.body.password || '';
+  const passwordCheck = validatePassword(password);
+  if (!passwordCheck.ok) return res.redirect('/admin/users/new?error=' + encodeURIComponent(passwordCheck.message));
+
+  if (getUserByLocalEmail.get(email)) {
+    return res.redirect('/admin/users/new?error=' + encodeURIComponent('A user with this email already exists.'));
+  }
+
+  const id = `local:${crypto.randomUUID()}`;
+  insertLocalUser.run({ id, username, email, password_hash: await hashPassword(password) });
+  if (isAdminFlag) db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(id);
+  grantDefaultResources(id);
+  try { await passport.syncPanelUser(id, email, username); } catch (err) { console.error('Panel sync failed:', err.message); }
+
+  if (sendEmail) {
+    const s = settingsObj();
+    const base = (s.dashboard_url || process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    mailer.sendNewAccountEmail({ to: email, username, password, appName: s.app_name, loginUrl: `${base}/login` }).catch(() => {});
+  }
+
+  audit(req.user, 'user.create', { type:'user', id, name:username }, { email, is_admin: isAdminFlag, emailed: sendEmail }, req.ip);
+  res.redirect('/admin/users?success=' + encodeURIComponent(`User "${username}" created.`));
 });
 
 // Dedicated /admin/transactions page

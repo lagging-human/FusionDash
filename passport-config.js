@@ -1,10 +1,13 @@
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const LocalStrategy = require('passport-local').Strategy;
 const db = require('./db');
 const { findOrCreatePanelUser, getPanelUser } = require('./pterodactyl');
+const { normalizeEmail, verifyPassword } = require('./auth-utils');
 
 const getUserStmt = db.prepare('SELECT * FROM users WHERE id = ?');
+const getUserByLocalEmailStmt = db.prepare("SELECT * FROM users WHERE provider='local' AND email = ?");
 const upsertUserStmt = db.prepare(`
   INSERT INTO users (id, provider, username, email, avatar)
   VALUES (@id, @provider, @username, @email, @avatar)
@@ -112,4 +115,25 @@ passport.use(new GoogleStrategy(
   }
 ));
 
+// Email + password login. The DB row already exists by the time this runs
+// (created by the /register or /admin/users/new handlers) — this strategy
+// only ever authenticates, never creates accounts.
+passport.use(new LocalStrategy(
+  { usernameField: 'email', passwordField: 'password' },
+  async (email, password, done) => {
+    try {
+      const user = getUserByLocalEmailStmt.get(normalizeEmail(email));
+      if (!user || !user.password_hash) {
+        return done(null, false, { message: 'Incorrect email or password.' });
+      }
+      const match = await verifyPassword(password, user.password_hash);
+      if (!match) return done(null, false, { message: 'Incorrect email or password.' });
+      done(null, user);
+    } catch (err) { done(err); }
+  }
+));
+
 module.exports = passport;
+// Exposed so server.js can link a freshly created local/admin-created account
+// to the Pterodactyl panel the same way OAuth signups already do.
+module.exports.syncPanelUser = syncPanelUser;

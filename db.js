@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS users (
   avatar                TEXT,
   pterodactyl_user_id   INTEGER,
   is_admin              INTEGER DEFAULT 0,
+  -- Local (email/password) auth — NULL for OAuth-only accounts
+  password_hash         TEXT,
+  reset_token_hash      TEXT,
+  reset_token_expires   TEXT,
   -- Coin balance
   coins                 INTEGER DEFAULT 0,
   -- Resource pool (what the user currently owns/can allocate)
@@ -227,6 +231,9 @@ const migrations = [
   `ALTER TABLE nodes ADD COLUMN location TEXT DEFAULT ''`,
   `ALTER TABLE nodes ADD COLUMN public_port INTEGER DEFAULT 0`,
   `ALTER TABLE plans ADD COLUMN available_node_ids TEXT DEFAULT '[]'`,
+  `ALTER TABLE users ADD COLUMN password_hash TEXT`,
+  `ALTER TABLE users ADD COLUMN reset_token_hash TEXT`,
+  `ALTER TABLE users ADD COLUMN reset_token_expires TEXT`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 

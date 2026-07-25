@@ -137,6 +137,27 @@
 
       <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
         <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+          <%- icon('mail', 'h-4 w-4 text-zinc-400') %>
+          <p class="text-sm font-semibold text-white">Email (SMTP)</p>
+          <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+            <%= smtpConfigured ? 'bg-green-500/10 text-green-400 ring-1 ring-green-500/20' : 'bg-zinc-500/10 text-zinc-500 ring-1 ring-zinc-500/20' %>">
+            <%= smtpConfigured ? 'Configured' : 'Not configured' %>
+          </span>
+        </div>
+        <div class="p-5">
+          <p class="text-xs text-zinc-500">
+            Powers "Forgot password" reset emails and optional new-account emails from the admin Users page.
+            Configured via <code class="text-zinc-400">.env</code> — not stored in the database, so there's nothing to edit here.
+          </p>
+          <p class="mt-2 text-xs text-zinc-600">
+            Set <code class="text-zinc-400">SMTP_HOST</code>, <code class="text-zinc-400">SMTP_PORT</code>, <code class="text-zinc-400">SMTP_USER</code>,
+            <code class="text-zinc-400">SMTP_PASS</code>, and optionally <code class="text-zinc-400">SMTP_FROM</code> / <code class="text-zinc-400">SMTP_FROM_NAME</code> / <code class="text-zinc-400">SMTP_SECURE</code>.
+          </p>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+        <div class="flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06]">
           <%- icon('refresh', 'h-4 w-4 text-zinc-400') %>
           <p class="text-sm font-semibold text-white">Server Renewal</p>
           <span class="ml-auto inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
