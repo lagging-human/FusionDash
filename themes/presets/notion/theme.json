@@ -1,0 +1,36 @@
+{
+  "name": "Notion",
+  "palette": {
+    "pageBackground": "#ffffff",
+    "bodyText": "#37352f",
+    "neutral": { "950": "#ffffff", "900": "#f7f6f3", "800": "#efeeea", "700": "#e3e1dc", "600": "#c9c7c0", "500": "#9a9793", "400": "#6f6e69", "300": "#37352f" },
+    "accent":  { "300": "#8ab8ee", "400": "#5499e7", "500": "#2383e2", "600": "#1a6bc4" },
+    "success": "#2f9e44", "danger": "#e03131", "warning": "#f08c00"
+  },
+  "sections": {
+    "sidebar": { "background": "#f7f6f3", "border": "#e3e1dc", "text": "#6f6e69", "textHover": "#37352f", "textActive": "#37352f", "activeBg": "#efeeea", "width": "15.5rem" },
+    "header":  { "background": "#ffffff", "border": "#e3e1dc" },
+    "card":    { "background": "#ffffff", "border": "#e3e1dc", "hoverBackground": "#f7f6f3" }
+  },
+  "typography": {
+    "fontFamily": "'Inter',system-ui,sans-serif",
+    "fontSource": "google",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px",
+    "headingFontFamily": null,
+    "headingGoogleFontUrl": null,
+    "weightNormal": 400, "weightMedium": 500, "weightSemibold": 600, "weightBold": 700,
+    "letterSpacing": "0", "headingLetterSpacing": "0", "lineHeight": "1.5",
+    "monoFontFamily": "'JetBrains Mono',ui-monospace,monospace"
+  },
+  "layout": { "radiusScale": 0.85, "cardShadow": "0 1px 3px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04)", "spaceScale": 1, "borderWidth": "1px" },
+  "effects": {
+    "glass": false, "glassBlur": "16px", "glassOpacity": 1,
+    "gradientBg": false, "gradientStops": [], "gradientAngle": "135deg", "gradientType": "radial",
+    "noise": false, "overlayTint": "dark"
+  },
+  "animations": { "enabled": true, "speed": "0.2s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

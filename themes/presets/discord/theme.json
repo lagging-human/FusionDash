@@ -1,0 +1,36 @@
+{
+  "name": "Discord",
+  "palette": {
+    "pageBackground": "#313338",
+    "bodyText": "#dbdee1",
+    "neutral": { "950": "#1e1f22", "900": "#2b2d31", "800": "#313338", "700": "#383a40", "600": "#404249", "500": "#4e5058", "400": "#80848e", "300": "#b5bac1" },
+    "accent":  { "300": "#a3abf8", "400": "#7983f5", "500": "#5865f2", "600": "#4752c4" },
+    "success": "#23a55a", "danger": "#f23f42", "warning": "#f0b232"
+  },
+  "sections": {
+    "sidebar": { "background": "#2b2d31", "border": "rgba(0,0,0,.24)", "text": "#96989d", "textHover": "#dbdee1", "textActive": "#f2f3f5", "activeBg": "#404249", "width": "15.5rem" },
+    "header":  { "background": "#2b2d31", "border": "rgba(0,0,0,.24)" },
+    "card":    { "background": "#2b2d31", "border": "rgba(0,0,0,.16)", "hoverBackground": "#35373c" }
+  },
+  "typography": {
+    "fontFamily": "'gg sans','Inter',system-ui,sans-serif",
+    "fontSource": "google",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px",
+    "headingFontFamily": null,
+    "headingGoogleFontUrl": null,
+    "weightNormal": 400, "weightMedium": 500, "weightSemibold": 600, "weightBold": 700,
+    "letterSpacing": "0", "headingLetterSpacing": "0", "lineHeight": "1.375",
+    "monoFontFamily": "'JetBrains Mono',ui-monospace,monospace"
+  },
+  "layout": { "radiusScale": 0.9, "cardShadow": "0 2px 10px rgba(0,0,0,.24)", "spaceScale": 0.95, "borderWidth": "1px" },
+  "effects": {
+    "glass": false, "glassBlur": "16px", "glassOpacity": 1,
+    "gradientBg": false, "gradientStops": [], "gradientAngle": "135deg", "gradientType": "radial",
+    "noise": false, "overlayTint": "light"
+  },
+  "animations": { "enabled": true, "speed": "0.15s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

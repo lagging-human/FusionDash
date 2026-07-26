@@ -1,0 +1,36 @@
+{
+  "name": "Linear",
+  "palette": {
+    "pageBackground": "#08090a",
+    "bodyText": "#d0d6e0",
+    "neutral": { "950": "#050506", "900": "#0d0e10", "800": "#17181c", "700": "#212328", "600": "#34363c", "500": "#68696f", "400": "#94959c", "300": "#c8c9ce" },
+    "accent":  { "300": "#a6adeb", "400": "#8089de", "500": "#5e6ad2", "600": "#4a55b8" },
+    "success": "#4cb782", "danger": "#eb5757", "warning": "#f2c94c"
+  },
+  "sections": {
+    "sidebar": { "background": "#0d0e10", "border": "rgba(255,255,255,.06)", "text": "#8a8f98", "textHover": "#f7f8f8", "textActive": "#f7f8f8", "activeBg": "rgba(255,255,255,.05)", "width": "15rem" },
+    "header":  { "background": "#0d0e10", "border": "rgba(255,255,255,.06)" },
+    "card":    { "background": null, "border": null, "hoverBackground": null }
+  },
+  "typography": {
+    "fontFamily": "'Inter',system-ui,sans-serif",
+    "fontSource": "google",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px",
+    "headingFontFamily": null,
+    "headingGoogleFontUrl": null,
+    "weightNormal": 400, "weightMedium": 500, "weightSemibold": 600, "weightBold": 700,
+    "letterSpacing": "-0.011em", "headingLetterSpacing": "-0.019em", "lineHeight": "1.5",
+    "monoFontFamily": "'JetBrains Mono',ui-monospace,monospace"
+  },
+  "layout": { "radiusScale": 0.7, "cardShadow": "0 0 0 1px rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.3)", "spaceScale": 0.95, "borderWidth": "1px" },
+  "effects": {
+    "glass": false, "glassBlur": "16px", "glassOpacity": 1,
+    "gradientBg": false, "gradientStops": [], "gradientAngle": "135deg", "gradientType": "radial",
+    "noise": false, "overlayTint": "light"
+  },
+  "animations": { "enabled": true, "speed": "0.12s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

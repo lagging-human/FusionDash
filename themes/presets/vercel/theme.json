@@ -1,0 +1,36 @@
+{
+  "name": "Vercel",
+  "palette": {
+    "pageBackground": "#ffffff",
+    "bodyText": "#000000",
+    "neutral": { "950": "#ffffff", "900": "#fafafa", "800": "#eaeaea", "700": "#d4d4d4", "600": "#a1a1a1", "500": "#666666", "400": "#404040", "300": "#000000" },
+    "accent":  { "300": "#808080", "400": "#404040", "500": "#000000", "600": "#000000" },
+    "success": "#0070f3", "danger": "#ee0000", "warning": "#f5a623"
+  },
+  "sections": {
+    "sidebar": { "background": "#fafafa", "border": "#eaeaea", "text": "#666666", "textHover": "#000000", "textActive": "#000000", "activeBg": "#eaeaea", "width": "15rem" },
+    "header":  { "background": "#ffffff", "border": "#eaeaea" },
+    "card":    { "background": "#ffffff", "border": "#eaeaea", "hoverBackground": "#fafafa" }
+  },
+  "typography": {
+    "fontFamily": "'Geist','Inter',system-ui,sans-serif",
+    "fontSource": "google",
+    "googleFontUrl": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+    "customFontUrl": null,
+    "baseFontSize": "16px",
+    "headingFontFamily": null,
+    "headingGoogleFontUrl": null,
+    "weightNormal": 400, "weightMedium": 500, "weightSemibold": 600, "weightBold": 700,
+    "letterSpacing": "-0.01em", "headingLetterSpacing": "-0.02em", "lineHeight": "1.5",
+    "monoFontFamily": "'Geist Mono','JetBrains Mono',ui-monospace,monospace"
+  },
+  "layout": { "radiusScale": 0.5, "cardShadow": "0 0 0 1px #eaeaea", "spaceScale": 1, "borderWidth": "1px" },
+  "effects": {
+    "glass": false, "glassBlur": "16px", "glassOpacity": 1,
+    "gradientBg": false, "gradientStops": [], "gradientAngle": "135deg", "gradientType": "radial",
+    "noise": false, "overlayTint": "dark"
+  },
+  "animations": { "enabled": true, "speed": "0.15s", "style": "fade", "cardHover": false, "buttonTransition": true, "glowAccent": false },
+  "images": { "logoUrl": null, "loginBackgroundUrl": null, "bodyBackgroundUrl": null },
+  "customCss": ""
+}

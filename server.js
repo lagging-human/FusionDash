@@ -1776,13 +1776,37 @@ app.post('/admin/themes/:slug/update', ensureAdmin, (req, res) => {
         pageBackground: b.pageBackground, bodyText: b.bodyText,
         neutral: { '950': b.n950, '900': b.n900, '800': b.n800, '700': b.n700, '600': b.n600, '500': b.n500, '400': b.n400, '300': b.n300 },
         accent:  { '300': b.a300, '400': b.a400, '500': b.a500, '600': b.a600 },
+        success: b.successColor || '#22c55e', danger: b.dangerColor || '#ef4444', warning: b.warningColor || '#eab308',
+      },
+      sections: {
+        sidebar: {
+          background: b.sidebarBg, border: b.sidebarBorder,
+          text: b.sidebarText, textHover: b.sidebarTextHover, textActive: b.sidebarTextActive,
+          activeBg: b.sidebarActiveBg, width: b.sidebarWidth || '16rem',
+        },
+        header: { background: b.headerBg, border: b.headerBorder },
+        card:   { background: b.cardBg || null, border: b.cardBorder || null, hoverBackground: b.cardHoverBg || null },
       },
       typography: {
         fontFamily: b.fontFamily, googleFontUrl: b.googleFontUrl || null, baseFontSize: b.baseFontSize,
+        headingFontFamily: b.headingFontFamily || null, headingGoogleFontUrl: b.headingGoogleFontUrl || null,
+        weightNormal: parseInt(b.weightNormal) || 400, weightMedium: parseInt(b.weightMedium) || 500,
+        weightSemibold: parseInt(b.weightSemibold) || 600, weightBold: parseInt(b.weightBold) || 700,
+        letterSpacing: b.letterSpacing || '0', headingLetterSpacing: b.headingLetterSpacing || '0',
+        lineHeight: b.lineHeight || '1.5', monoFontFamily: b.monoFontFamily || "'JetBrains Mono',ui-monospace,monospace",
       },
       layout: {
         radiusScale: parseFloat(b.radiusScale) || 1,
         cardShadow: b.cardShadow,
+        spaceScale: parseFloat(b.spaceScale) || 1,
+        borderWidth: b.borderWidth || '1px',
+      },
+      effects: {
+        glass: b.glassEnabled === 'on', glassBlur: b.glassBlur || '16px', glassOpacity: parseFloat(b.glassOpacity) || 1,
+        gradientBg: b.gradientEnabled === 'on',
+        gradientStops: (b.gradientStops || '').split(',').map(s => s.trim()).filter(Boolean),
+        gradientAngle: b.gradientAngle || '135deg', gradientType: b.gradientType || 'radial',
+        noise: b.noiseEnabled === 'on', overlayTint: b.overlayTint === 'dark' ? 'dark' : 'light',
       },
       animations: {
         enabled: b.animEnabled === 'on', speed: b.animSpeed || '0.18s', style: b.animStyle || 'fade',

@@ -2,7 +2,7 @@
 <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden" onclick="closeSidebar()"></div>
 
 <!-- Sidebar -->
-<aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-[#0c0d0f] border-r border-white/[0.06] flex flex-col"
+<aside id="sidebar" class="fd-sidebar fixed inset-y-0 left-0 z-40 w-64 border-r flex flex-col"
   style="transition:transform .22s cubic-bezier(.4,0,.2,1); transform:translateX(-100%)">
 
   <!-- Logo -->
@@ -117,7 +117,7 @@
 </aside>
 
 <!-- Mobile top bar -->
-<div class="lg:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 bg-[#0c0d0f] border-b border-white/[0.06]">
+<div class="fd-header lg:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 border-b">
   <button onclick="openSidebar()" class="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors">
     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
@@ -142,14 +142,14 @@
     padding: 0.5rem 0.75rem;
     font-size: 0.8125rem;
     font-weight: 500;
-    color: #a1a1aa;
+    color: var(--fd-sidebar-text, #a1a1aa);
     text-decoration: none;
     transition: background-color .15s, color .15s;
   }
-  .nav-link:hover { background: rgba(255,255,255,0.05); color: #fff; }
-  .nav-active { background: rgba(255,255,255,0.07) !important; color: #fff !important; }
-  .nav-admin:hover { background: rgba(99,102,241,0.12); color: #818cf8; }
-  .nav-admin.nav-active { background: rgba(99,102,241,0.12) !important; color: #818cf8 !important; }
+  .nav-link:hover { background: var(--fd-sidebar-active-bg, rgba(255,255,255,0.05)); color: var(--fd-sidebar-text-hover, #fff); }
+  .nav-active { background: var(--fd-sidebar-active-bg, rgba(255,255,255,0.07)) !important; color: var(--fd-sidebar-text-active, #fff) !important; }
+  .nav-admin:hover { background: color-mix(in srgb, var(--fd-a500, #6366f1) 12%, transparent); color: var(--fd-a400, #818cf8); }
+  .nav-admin.nav-active { background: color-mix(in srgb, var(--fd-a500, #6366f1) 12%, transparent) !important; color: var(--fd-a400, #818cf8) !important; }
   .nav-icon { height: 1rem; width: 1rem; flex-shrink: 0; }
 
   /* Desktop: sidebar always visible */
