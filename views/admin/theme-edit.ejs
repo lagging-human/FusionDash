@@ -28,7 +28,39 @@
 
   <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-4 max-w-4xl">
 
-    <form action="/admin/themes/<%= theme.slug %>/update" method="POST" class="space-y-4">
+    <!-- Live preview -->
+    <div id="themePreview" class="sticky top-4 z-10 mb-5 rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl"
+      style="
+        --pv-page-bg:<%= theme.palette.pageBackground %>; --pv-body-text:<%= theme.palette.bodyText %>;
+        --pv-n900:<%= theme.palette.neutral['900'] %>; --pv-n400:<%= theme.palette.neutral['400'] %>;
+        --pv-a500:<%= theme.palette.accent['500'] %>;
+        --pv-sidebar-bg:<%= theme.sections.sidebar.background %>; --pv-sidebar-border:<%= theme.sections.sidebar.border %>;
+        --pv-sidebar-text:<%= theme.sections.sidebar.text %>; --pv-sidebar-text-active:<%= theme.sections.sidebar.textActive %>;
+        --pv-sidebar-active-bg:<%= theme.sections.sidebar.activeBg %>;
+        --pv-header-bg:<%= theme.sections.header.background %>; --pv-header-border:<%= theme.sections.header.border %>;
+        --pv-card-bg:<%= theme.sections.card.background || 'rgba(255,255,255,.03)' %>; --pv-card-border:<%= theme.sections.card.border || 'rgba(255,255,255,.07)' %>;
+        --pv-radius:<%= theme.layout.radiusScale %>;
+      ">
+      <div class="flex h-44 sm:h-52">
+        <div class="preview-sidebar w-16 sm:w-36 shrink-0 flex flex-col gap-1.5 p-2 pt-3">
+          <div class="preview-nav-active rounded-lg px-2 py-1.5 text-[9px] sm:text-[10px] font-medium truncate">&#9632; Dashboard</div>
+          <div class="preview-nav rounded-lg px-2 py-1.5 text-[9px] sm:text-[10px] truncate">&#9632; My Servers</div>
+          <div class="preview-nav rounded-lg px-2 py-1.5 text-[9px] sm:text-[10px] truncate">&#9632; Store</div>
+        </div>
+        <div class="preview-body flex-1 flex flex-col overflow-hidden">
+          <div class="preview-header h-8 shrink-0"></div>
+          <div class="flex-1 p-3 flex flex-col justify-center">
+            <div class="preview-card rounded-xl p-3">
+              <p class="preview-heading text-xs font-semibold">Card heading</p>
+              <p class="preview-text text-[10px] mt-1 leading-relaxed">This preview updates live as you edit — nothing here is saved until you click Save Theme.</p>
+              <button type="button" id="previewBtn" class="preview-button text-[10px] font-semibold px-3.5 py-1.5 mt-3">Primary Button</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form action="/admin/themes/<%= theme.slug %>/update" method="POST" class="space-y-4" oninput="updateThemePreview()" onchange="updateThemePreview()">
 
       <div>
         <label class="block text-xs text-zinc-500 mb-1">Theme Name</label>
@@ -550,6 +582,59 @@
 
   </div>
 </div>
-<style>.no-marker::-webkit-details-marker{display:none}.no-marker{list-style:none}</style>
+<style>
+.no-marker::-webkit-details-marker{display:none}.no-marker{list-style:none}
+
+#themePreview { background: var(--pv-page-bg); color: var(--pv-body-text); font-family: inherit; }
+#themePreview .preview-sidebar { background: var(--pv-sidebar-bg); border-right: 1px solid var(--pv-sidebar-border); }
+#themePreview .preview-nav { color: var(--pv-sidebar-text); }
+#themePreview .preview-nav-active { background: var(--pv-sidebar-active-bg); color: var(--pv-sidebar-text-active); }
+#themePreview .preview-header { background: var(--pv-header-bg); border-bottom: 1px solid var(--pv-header-border); }
+#themePreview .preview-card { background: var(--pv-card-bg); border: 1px solid var(--pv-card-border); border-radius: calc(1rem * var(--pv-radius)); }
+#themePreview .preview-heading { color: var(--pv-body-text); }
+#themePreview .preview-text { color: var(--pv-n400); }
+#themePreview .preview-button { background: var(--pv-a500); color: #fff; border-radius: calc(.5rem * var(--pv-radius)); border: 1.5px solid transparent; }
+</style>
+
+<script>
+  function updateThemePreview() {
+    const el = document.getElementById('themePreview');
+    const f = (name) => { const i = document.querySelector(`[name="${name}"]`); return i ? i.value : null; };
+    const set = (prop, val) => { if (val) el.style.setProperty(prop, val); };
+
+    set('--pv-page-bg', f('pageBackground'));
+    set('--pv-body-text', f('bodyText'));
+    set('--pv-n900', f('n900'));
+    set('--pv-n400', f('n400'));
+    set('--pv-a500', f('a500'));
+    set('--pv-sidebar-bg', f('sidebarBg'));
+    set('--pv-sidebar-border', f('sidebarBorder'));
+    set('--pv-sidebar-text', f('sidebarText'));
+    set('--pv-sidebar-text-active', f('sidebarTextActive'));
+    set('--pv-sidebar-active-bg', f('sidebarActiveBg'));
+    set('--pv-header-bg', f('headerBg'));
+    set('--pv-header-border', f('headerBorder'));
+    set('--pv-card-bg', f('cardBg') || 'rgba(255,255,255,.03)');
+    set('--pv-card-border', f('cardBorder') || 'rgba(255,255,255,.07)');
+    set('--pv-radius', f('radiusScale'));
+
+    // Button shape + fill — enough properties differ between fills that it's
+    // simpler to set them directly than to fight CSS variables for each one.
+    const btn = document.getElementById('previewBtn');
+    const shape = f('buttonShape'), fill = f('buttonFill'), accent = f('a500') || '#3b82f6';
+    const accentLight = f('a400') || accent, accentDark = f('a600') || accent;
+    btn.style.borderRadius = shape === 'pill' ? '9999px' : shape === 'square' ? '4px' : `calc(.5rem * ${f('radiusScale') || 1})`;
+    if (fill === 'outline') {
+      btn.style.background = 'transparent'; btn.style.color = accent; btn.style.borderColor = accent;
+    } else if (fill === 'ghost') {
+      btn.style.background = 'transparent'; btn.style.color = accent; btn.style.borderColor = 'transparent';
+    } else if (fill === 'gradient') {
+      btn.style.background = `linear-gradient(135deg, ${accentLight}, ${accentDark})`; btn.style.color = '#fff'; btn.style.borderColor = 'transparent';
+    } else {
+      btn.style.background = accent; btn.style.color = '#fff'; btn.style.borderColor = 'transparent';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', updateThemePreview);
+</script>
 </body>
 </html>

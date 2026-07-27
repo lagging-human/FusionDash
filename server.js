@@ -8,6 +8,8 @@ const crypto   = require('crypto');
 const multer   = require('multer');
 const ptero    = require('./pterodactyl');
 const { suggestRoute } = require('./route-suggest');
+const plugins  = require('./plugins');
+const lang     = require('./lang');
 const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
 const { icon } = require('./icons');
@@ -173,6 +175,10 @@ function ensureAdmin(req, res, next) {
   res.status(403).render('error', { message: 'Admin access required.', pageTitle: 'Error' });
 }
 
+// Plugins — boot-time only (see plugins.js header comment for why). Must run
+// after ensureAuth/ensureAdmin/audit/icon exist, and before any catch-all.
+plugins.loadEnabledPlugins(app, { db, ptero, ensureAuth, ensureAdmin, audit, icon });
+
 // Refresh session user from DB on every request so coins/resources are current
 app.use((req, res, next) => {
   if (req.isAuthenticated()) req.user = getUser.get(req.user.id) || req.user;
@@ -182,6 +188,7 @@ app.use((req, res, next) => {
   res.locals.appName    = s.app_name        || 'FusionDash';
   res.locals.appFavicon = s.app_favicon_url || '';
   res.locals.icon       = icon;
+  res.locals.t          = lang.t;
   res.locals.appVersion = require('./package.json').version || '1.0.0';
   // Dashboard Credit: when disabled, hides FusionDash promo/GitHub links across public views
   res.locals.hideCredit = s.hide_credit === '1';
@@ -2044,6 +2051,66 @@ app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
     try { await ptero.api.post(`/servers/${s.pterodactyl_server_id}/suspend`); db.prepare('UPDATE servers SET subscription_active=0 WHERE id=?').run(s.id); } catch {}
   }
   res.json({ suspended: expired.length });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Site Text
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/admin/lang', ensureAdmin, (req, res) => {
+  res.render('admin/lang', {
+    pageTitle: 'Site Text',
+    entries: lang.listAll(lang.DEFAULT_LOCALE),
+    locale: lang.DEFAULT_LOCALE,
+    success: req.query.success,
+  });
+});
+
+app.post('/admin/lang/update', ensureAdmin, (req, res) => {
+  const b = req.body;
+  let changed = 0;
+  for (const key of Object.keys(b)) {
+    if (!key.startsWith('key__')) continue;
+    const realKey = key.slice('key__'.length);
+    lang.setOverride(lang.DEFAULT_LOCALE, realKey, (b[key] || '').trim());
+    changed++;
+  }
+  audit(req.user, 'lang.update', { type:'lang', id:lang.DEFAULT_LOCALE, name:'Site Text' }, { keysChanged: changed }, req.ip);
+  res.redirect('/admin/lang?success=' + encodeURIComponent('Saved — live immediately, no restart needed.'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Plugins
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/admin/plugins', ensureAdmin, (req, res) => {
+  res.render('admin/plugins', {
+    pageTitle: 'Plugins',
+    installed: plugins.listInstalled(),
+    canRestart: !!process.env.pm_id,
+    error: req.query.error, success: req.query.success,
+  });
+});
+
+app.post('/admin/plugins/:slug/toggle', ensureAdmin, (req, res) => {
+  const enable = req.body.enabled === 'on';
+  plugins.setEnabled(req.params.slug, enable);
+  audit(req.user, enable ? 'plugin.enable' : 'plugin.disable', { type:'plugin', id:req.params.slug, name:req.params.slug }, {}, req.ip);
+  res.redirect('/admin/plugins?success=' + encodeURIComponent(
+    `${req.params.slug} ${enable ? 'enabled' : 'disabled'} — restart the app for this to take effect.`));
+});
+
+app.post('/admin/plugins/restart', ensureAdmin, (req, res) => {
+  if (!process.env.pm_id) {
+    return res.redirect('/admin/plugins?error=' + encodeURIComponent(
+      'Not running under PM2 (no pm_id env var) — restart manually, e.g. `pm2 restart fusiondash`.'));
+  }
+  audit(req.user, 'system.restart', { type:'system', id:'app', name:'FusionDash' }, {}, req.ip);
+  res.redirect('/admin/plugins?success=' + encodeURIComponent('Restarting now — this page will be unreachable for a few seconds.'));
+  const pmId = process.env.pm_id;
+  setTimeout(() => {
+    require('child_process').exec(`pm2 restart ${pmId}`, (err) => {
+      if (err) console.error('[plugins] pm2 restart failed:', err.message);
+    });
+  }, 600);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -127,6 +127,9 @@
                   <% } %>
                 <% } %>
                 <a href="/servers/<%= server.id %>/edit" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Edit</a>
+                <% (pluginServerCardActions || []).forEach(a => { %>
+                <a href="<%= a.hrefTemplate.replace(':id', server.id) %>" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors"><%= a.label %></a>
+                <% }) %>
                 <a href="/servers/<%= server.id %>/delete" class="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
               </div>
             </td>
@@ -159,8 +162,11 @@
           <span><%= (server.disk/1024).toFixed(1) %> GiB Disk</span>
           <span><%= (server.cpu/100).toFixed(1) %> CPU</span>
         </div>
-        <div class="flex items-center gap-x-2">
+        <div class="flex items-center gap-x-2 flex-wrap gap-y-2">
           <a href="/servers/<%= server.id %>/edit" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300 hover:border-white/20 transition-colors">Edit</a>
+          <% (pluginServerCardActions || []).forEach(a => { %>
+          <a href="<%= a.hrefTemplate.replace(':id', server.id) %>" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300 hover:border-white/20 transition-colors"><%= a.label %></a>
+          <% }) %>
           <a href="/servers/<%= server.id %>/delete" class="flex-1 text-center rounded-lg border border-red-500/20 bg-red-500/5 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors">Delete</a>
         </div>
       </div>
@@ -265,6 +271,9 @@
                   </form>
                 <% } %>
                 <a href="/servers/<%= server.id %>/edit" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors">Edit</a>
+                <% (pluginServerCardActions || []).forEach(a => { %>
+                <a href="<%= a.hrefTemplate.replace(':id', server.id) %>" class="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-white/20 hover:text-white transition-colors"><%= a.label %></a>
+                <% }) %>
               </div>
             </td>
           </tr>
@@ -314,6 +323,9 @@
           </form>
           <% } %>
           <a href="/servers/<%= server.id %>/edit" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300">Edit</a>
+          <% (pluginServerCardActions || []).forEach(a => { %>
+          <a href="<%= a.hrefTemplate.replace(':id', server.id) %>" class="flex-1 text-center rounded-lg border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-zinc-300"><%= a.label %></a>
+          <% }) %>
         </div>
       </div>
       <% }) %>

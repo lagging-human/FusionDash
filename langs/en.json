@@ -1,0 +1,22 @@
+{
+  "nav.dashboard": "Dashboard",
+  "nav.servers": "My Servers",
+  "nav.new_server": "New Server",
+  "nav.store": "Store",
+  "nav.earn": "Earn Coins",
+  "nav.billing": "Plans & Billing",
+  "nav.account": "Account Settings",
+  "nav.panel_password": "Panel Password",
+  "nav.sign_out": "Sign out",
+  "nav.admin_panel": "Admin Panel",
+  "nav.plugins": "Plugins",
+  "nav.theme_editor": "Theme Editor",
+  "nav.site_text": "Site Text",
+  "nav.email_broadcast": "Email Broadcast",
+  "nav.audit_log": "Audit Log",
+  "nav.group_servers": "Servers",
+  "nav.group_resources": "Resources",
+  "nav.group_billing": "Billing",
+  "nav.group_account": "Account",
+  "nav.group_admin": "Admin"
+}

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'plugins' }) %>
+<div class="app-main">
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <svg class="h-5 w-5 text-green-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+    <div>
+      <p class="text-xs text-zinc-500">Admin <span class="text-zinc-700">/ Plugins</span></p>
+      <p class="text-sm font-semibold text-white mt-0.5">Plugins</p>
+    </div>
+    <form action="/admin/plugins/restart" method="POST" onsubmit="return confirm('Restart the app now? It will be briefly unreachable.')">
+      <button type="submit" class="inline-flex items-center gap-x-2 rounded-full bg-zinc-500/10 px-4 py-2 text-xs font-semibold text-zinc-300 ring-1 ring-inset ring-zinc-500/20 hover:bg-zinc-500/20 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+        Restart App
+      </button>
+    </form>
+  </div>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-4 max-w-4xl">
+
+    <% if (!canRestart) { %>
+    <div class="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+      <p class="text-xs text-amber-300">Not running under PM2 right now, so the Restart button above won't do anything — toggle plugins below, then restart manually (<code class="font-mono">pm2 restart fusiondash</code> or however your process manager is set up) for changes to take effect.</p>
+    </div>
+    <% } %>
+
+    <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+      <p class="text-xs text-zinc-500 leading-relaxed">
+        Plugins are real code — a folder under <code class="font-mono text-zinc-400">/plugins/&lt;slug&gt;</code> with a manifest and an <code class="font-mono text-zinc-400">index.js</code> that runs with full server access, same trust model as any file already in this codebase. Only enable plugins you or someone you trust wrote.
+        Toggling here doesn't take effect until the app restarts, since routes get registered at boot.
+      </p>
+    </div>
+
+    <% if (installed.length === 0) { %>
+    <div class="rounded-2xl border border-dashed border-white/[0.08] p-8 text-center">
+      <p class="text-sm text-zinc-500">No plugins installed yet.</p>
+      <p class="text-xs text-zinc-700 mt-1">Drop a folder into <code class="font-mono">/plugins/</code> with a <code class="font-mono">plugin.json</code> and <code class="font-mono">index.js</code>, then it'll show up here.</p>
+    </div>
+    <% } %>
+
+    <% installed.forEach(p => { %>
+    <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 flex items-start gap-x-4">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-x-2 flex-wrap">
+          <p class="text-sm font-semibold text-white"><%= p.name %></p>
+          <span class="text-[10px] text-zinc-600 font-mono">v<%= p.version %></span>
+          <% if (p.enabled) { %>
+          <span class="inline-flex items-center rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-medium text-green-400">Enabled</span>
+          <% } else { %>
+          <span class="inline-flex items-center rounded-full bg-zinc-500/15 px-2 py-0.5 text-[10px] font-medium text-zinc-500">Disabled</span>
+          <% } %>
+          <% if (!p.hasIndex) { %>
+          <span class="inline-flex items-center rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium text-red-400">Missing index.js</span>
+          <% } %>
+        </div>
+        <p class="text-xs text-zinc-500 mt-1"><%= p.description || 'No description provided.' %></p>
+        <p class="text-[10px] text-zinc-700 mt-1">by <%= p.author %> &middot; <code class="font-mono"><%= p.slug %></code></p>
+      </div>
+      <form action="/admin/plugins/<%= p.slug %>/toggle" method="POST" class="shrink-0">
+        <input type="hidden" name="enabled" value="<%= p.enabled ? '' : 'on' %>">
+        <button type="submit" class="relative shrink-0" aria-label="Toggle plugin">
+          <div class="w-10 h-5 rounded-full transition-colors <%= p.enabled ? 'bg-blue-500' : 'bg-zinc-700' %>"></div>
+          <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform <%= p.enabled ? 'translate-x-5' : '' %>"></div>
+        </button>
+      </form>
+    </div>
+    <% }) %>
+
+  </div>
+</div>
+</body>
+</html>

@@ -245,6 +245,13 @@ const migrations = [
     enabled    INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
+  `CREATE TABLE IF NOT EXISTS lang_overrides (
+    locale     TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (locale, key)
+  )`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 

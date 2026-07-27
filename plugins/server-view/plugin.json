@@ -1,0 +1,6 @@
+{
+  "name": "Server View",
+  "version": "1.0.0",
+  "description": "Adds a View button to server cards. Opens a details page with server info, its audit history, and a link into the real Pterodactyl panel — a working example of the plugin API for addServerCardAction + registerRoute.",
+  "author": "FusionDash"
+}
