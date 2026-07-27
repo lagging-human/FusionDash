@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<%- include('./components/header') %>
+<body class="flex min-h-screen items-center justify-center">
+  <div class="flex min-h-full flex-col justify-center py-12 px-6 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
+      <p class="text-6xl font-semibold text-zinc-700">404</p>
+      <h2 class="mt-4 text-xl font-medium text-white">That page doesn't exist</h2>
+      <p class="mt-2 text-sm text-zinc-500">
+        Nothing's at <code class="rounded bg-white/[0.06] px-1.5 py-0.5 text-zinc-400 font-mono text-xs"><%= requestedPath %></code>.
+      </p>
+
+      <% if (suggestion) { %>
+      <div class="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+        <p class="text-sm text-zinc-400">Did you mean:</p>
+        <a href="<%= suggestion.path %>" class="mt-3 inline-flex items-center gap-x-2 rounded-full bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+          <%= suggestion.label %>
+          <span class="text-blue-400/60 font-mono text-xs"><%= suggestion.path %></span>
+        </a>
+      </div>
+      <% } %>
+
+      <a href="<%= homeHref %>" class="mt-6 inline-block text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+        &larr; Or go to <%= homeLabel %>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

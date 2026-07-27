@@ -7,6 +7,7 @@ const path     = require('path');
 const crypto   = require('crypto');
 const multer   = require('multer');
 const ptero    = require('./pterodactyl');
+const { suggestRoute } = require('./route-suggest');
 const payments = require('./payments');
 const { startAutoUpdater, checkForUpdate } = require('./auto-update');
 const { icon } = require('./icons');
@@ -2043,6 +2044,21 @@ app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
     try { await ptero.api.post(`/servers/${s.pterodactyl_server_id}/suspend`); db.prepare('UPDATE servers SET subscription_active=0 WHERE id=?').run(s.id); } catch {}
   }
   res.json({ suspended: expired.length });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 404 — must stay last, after every other route
+// ─────────────────────────────────────────────────────────────────────────────
+app.use((req, res) => {
+  const isAdmin = req.isAuthenticated() && req.user?.is_admin;
+  const loggedIn = req.isAuthenticated();
+  res.status(404).render('404', {
+    pageTitle: 'Page Not Found',
+    requestedPath: req.path,
+    suggestion: suggestRoute(req.path, !!isAdmin),
+    homeHref: loggedIn ? '/dashboard' : '/login',
+    homeLabel: loggedIn ? 'your dashboard' : 'sign in',
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
