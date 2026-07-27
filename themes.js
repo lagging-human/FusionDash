@@ -74,8 +74,16 @@ const DEFAULT_THEME = {
   layout: {
     radiusScale: 1,
     cardShadow: '0 1px 2px rgba(0,0,0,.4)',
-    spaceScale: 1,        // NEW — 0.8 compact … 1.25 spacious, scales the app's real padding/gap utilities
-    borderWidth: '1px',   // NEW
+    spaceScale: 1,        // 0.8 compact … 1.25 spacious, scales the app's real padding/gap utilities
+    borderWidth: '1px',
+    sidebarPosition: 'left', // NEW — 'left' | 'top'
+    sidebarCollapsed: false, // NEW — default icon-only state (user can still toggle live; see sidebar.ejs)
+    navStyle: 'both',        // NEW — 'both' | 'icons' | 'text'
+    cardGridMinWidth: '280px', // NEW — drives how many columns .card-grid fits per row
+  },
+  buttons: {              // NEW — primary-button (solid accent CTA) design, independent of card radius
+    shape: 'rounded',     // 'pill' | 'rounded' | 'square'
+    fill: 'solid',        // 'solid' | 'outline' | 'ghost' | 'gradient'
   },
   effects: {              // NEW
     glass: false, glassBlur: '16px', glassOpacity: 1,
@@ -270,6 +278,7 @@ function generateCSS(theme) {
   // Layout / spacing
   vars.push(`--fd-radius-scale:${l.radiusScale};`, `--fd-shadow:${l.cardShadow};`);
   vars.push(`--fd-space-scale:${l.spaceScale};`, `--fd-border-w:${l.borderWidth};`);
+  vars.push(`--fd-grid-min:${l.cardGridMinWidth || '280px'};`);
 
   // Effects
   const overlayRgb = fx.overlayTint === 'dark' ? '0,0,0' : '255,255,255';
@@ -326,6 +335,61 @@ function generateCSS(theme) {
   rules.push(`.nav-link{color:var(--fd-sidebar-text) !important;}`);
   rules.push(`.nav-link:hover{background:var(--fd-sidebar-active-bg) !important;color:var(--fd-sidebar-text-hover) !important;}`);
   rules.push(`.nav-active{background:var(--fd-sidebar-active-bg) !important;color:var(--fd-sidebar-text-active) !important;}`);
+
+  // Sidebar collapse (icon-only). Server-rendered default via the aside's own
+  // class; the toggle button in sidebar.ejs flips the same class live. Since
+  // .fd-sidebar and .app-main are siblings (not nested), a sibling combinator
+  // picks this up automatically with no JS needed on .app-main's side at all.
+  rules.push(`.fd-sidebar.fd-collapsed{width:4.5rem !important;}`);
+  rules.push(`.fd-sidebar.fd-collapsed .nav-label,.fd-sidebar.fd-collapsed .fd-hide-collapsed{display:none !important;}`);
+  rules.push(`.fd-sidebar.fd-collapsed .nav-link{justify-content:center;}`);
+  if (l.sidebarPosition !== 'top') {
+    rules.push(`@media (min-width:1024px){.fd-sidebar.fd-collapsed ~ .app-main{margin-left:4.5rem !important;}}`);
+  }
+
+  // Nav style — both / icons-only / text-only (independent of collapse width)
+  if (l.navStyle === 'icons') {
+    rules.push(`.nav-label{display:none !important;}`);
+    rules.push(`.nav-link{justify-content:center;}`);
+  } else if (l.navStyle === 'text') {
+    rules.push(`.nav-icon{display:none !important;}`);
+  }
+
+  // Sidebar position: top. Desktop only (>=1024px) — mobile keeps the
+  // off-canvas drawer regardless, since re-flowing touch nav is a separate
+  // concern from where the desktop rail sits.
+  if (l.sidebarPosition === 'top') {
+    rules.push(`@media (min-width:1024px){
+      .fd-sidebar{flex-direction:row !important;align-items:stretch !important;height:4rem !important;width:100% !important;inset:0 0 auto 0 !important;overflow:visible !important;}
+      .fd-sidebar.fd-collapsed{height:4rem !important;width:100% !important;}
+      .fd-sidebar > div:nth-of-type(1){order:1;border-bottom:0 !important;border-right:1px solid var(--fd-sidebar-border);}
+      .fd-sidebar > nav{order:2;flex:1 1 auto;display:flex !important;flex-direction:row;align-items:center;gap:.125rem;overflow-x:auto;overflow-y:visible;padding:0 .5rem !important;}
+      .fd-sidebar > nav p{display:none !important;}
+      .fd-sidebar > div:nth-of-type(2){order:3;border-bottom:0 !important;border-left:1px solid var(--fd-sidebar-border);flex-shrink:0;}
+      .fd-sidebar > div:nth-of-type(3){order:4;border-top:0 !important;border-left:1px solid var(--fd-sidebar-border);flex-shrink:0;width:auto !important;}
+      .fd-sidebar .nav-link{white-space:nowrap;flex-shrink:0;}
+      a[href="/store"],a[href="/billing"],a[href="/account"],a[href="/admin"]{border-left:1px solid var(--fd-sidebar-border);padding-left:1rem !important;margin-left:.25rem;}
+      .app-main{margin-left:0 !important;margin-top:4rem !important;width:100% !important;}
+    }`);
+  }
+
+  // Card grid density
+  rules.push(`.card-grid{grid-template-columns:repeat(auto-fill,minmax(var(--fd-grid-min),1fr)) !important;}`);
+
+  // Button design — governs the solid accent CTA pattern specifically
+  // (the same .bg-blue-500.text-white buttons the light-theme text fix
+  // already targets), not the tinted/ghost admin action buttons elsewhere.
+  const btnSel = '.bg-blue-500.text-white,.bg-blue-400.text-white,.bg-blue-600.text-white';
+  if (theme.buttons.shape === 'pill') rules.push(`button${btnSel.replace(/,/g,',button')}{border-radius:9999px !important;}`);
+  else if (theme.buttons.shape === 'square') rules.push(`button${btnSel.replace(/,/g,',button')}{border-radius:4px !important;}`);
+  if (theme.buttons.fill === 'outline') {
+    rules.push(`${btnSel}{background-color:transparent !important;color:var(--fd-a500) !important;border:1.5px solid var(--fd-a500) !important;}`);
+  } else if (theme.buttons.fill === 'ghost') {
+    rules.push(`${btnSel}{background-color:transparent !important;color:var(--fd-a500) !important;}`);
+    rules.push(`${btnSel.split(',').map(s => s + ':hover').join(',')}{background-color:rgba(var(--fd-overlay-rgb),.08) !important;}`);
+  } else if (theme.buttons.fill === 'gradient') {
+    rules.push(`${btnSel}{background:linear-gradient(135deg,var(--fd-a400),var(--fd-a600)) !important;color:#fff !important;}`);
+  }
 
   // Card surfaces: explicit section override wins; otherwise every white/opacity
   // "glass" utility below derives from the same overlay system.

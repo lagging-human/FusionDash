@@ -280,6 +280,74 @@
             <input type="text" name="borderWidth" value="<%= theme.layout.borderWidth %>" placeholder="1px"
               class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
           </div>
+
+          <hr class="sm:col-span-2 border-white/[0.06]">
+
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Sidebar Position</label>
+            <select name="sidebarPosition" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              <option value="left" <%= theme.layout.sidebarPosition==='left'?'selected':'' %>>Left (default)</option>
+              <option value="top" <%= theme.layout.sidebarPosition==='top'?'selected':'' %>>Top bar</option>
+            </select>
+            <p class="text-[10px] text-zinc-700 mt-1">Top applies on desktop only — mobile keeps the slide-out drawer either way.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Nav Style</label>
+            <select name="navStyle" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              <option value="both" <%= theme.layout.navStyle==='both'?'selected':'' %>>Icons + Text</option>
+              <option value="icons" <%= theme.layout.navStyle==='icons'?'selected':'' %>>Icons only</option>
+              <option value="text" <%= theme.layout.navStyle==='text'?'selected':'' %>>Text only</option>
+            </select>
+          </div>
+          <div>
+            <label class="flex items-center gap-x-3 cursor-pointer select-none w-fit mt-1">
+              <div class="relative">
+                <input type="checkbox" name="sidebarCollapsed" <%= theme.layout.sidebarCollapsed ? 'checked' : '' %> class="sr-only peer">
+                <div class="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+                <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+              </div>
+              <span class="text-sm text-zinc-300">Sidebar collapsed (icon-only) by default</span>
+            </label>
+            <p class="text-[10px] text-zinc-700 mt-1">Left position only. Anyone can still expand/collapse live from the sidebar itself.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Card Grid Density</label>
+            <select name="cardGridMinWidth" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              <option value="220px" <%= theme.layout.cardGridMinWidth==='220px'?'selected':'' %>>Dense (more columns)</option>
+              <option value="260px" <%= theme.layout.cardGridMinWidth==='260px'?'selected':'' %>>Cozy</option>
+              <option value="280px" <%= theme.layout.cardGridMinWidth==='280px'?'selected':'' %>>Comfortable (default)</option>
+              <option value="340px" <%= theme.layout.cardGridMinWidth==='340px'?'selected':'' %>>Spacious (fewer columns)</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <!-- Buttons -->
+      <details class="group rounded-2xl border border-white/[0.06] overflow-hidden">
+        <summary class="no-marker flex items-center gap-x-2 px-5 py-3 bg-white/[0.02] border-b border-white/[0.06] cursor-pointer select-none">
+          <%- icon('card', 'h-4 w-4 text-blue-400') %>
+          <p class="text-sm font-semibold text-white">Buttons</p>
+          <span class="ml-auto text-zinc-600 text-xs group-open:rotate-180 transition-transform">&#9662;</span>
+        </summary>
+        <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Shape</label>
+            <select name="buttonShape" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              <option value="pill" <%= theme.buttons.shape==='pill'?'selected':'' %>>Pill</option>
+              <option value="rounded" <%= theme.buttons.shape==='rounded'?'selected':'' %>>Rounded</option>
+              <option value="square" <%= theme.buttons.shape==='square'?'selected':'' %>>Square</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1">Fill</label>
+            <select name="buttonFill" class="block w-full rounded-lg border-none py-2 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm">
+              <option value="solid" <%= theme.buttons.fill==='solid'?'selected':'' %>>Solid</option>
+              <option value="outline" <%= theme.buttons.fill==='outline'?'selected':'' %>>Outline</option>
+              <option value="ghost" <%= theme.buttons.fill==='ghost'?'selected':'' %>>Ghost</option>
+              <option value="gradient" <%= theme.buttons.fill==='gradient'?'selected':'' %>>Gradient</option>
+            </select>
+          </div>
+          <p class="sm:col-span-2 text-[10px] text-zinc-700">Applies to primary/solid-accent buttons (submit, sign in, upgrade) — not the tinted secondary buttons used throughout admin screens.</p>
         </div>
       </details>
 

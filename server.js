@@ -1800,6 +1800,14 @@ app.post('/admin/themes/:slug/update', ensureAdmin, (req, res) => {
         cardShadow: b.cardShadow,
         spaceScale: parseFloat(b.spaceScale) || 1,
         borderWidth: b.borderWidth || '1px',
+        sidebarPosition: b.sidebarPosition === 'top' ? 'top' : 'left',
+        sidebarCollapsed: b.sidebarCollapsed === 'on',
+        navStyle: ['both','icons','text'].includes(b.navStyle) ? b.navStyle : 'both',
+        cardGridMinWidth: b.cardGridMinWidth || '280px',
+      },
+      buttons: {
+        shape: ['pill','rounded','square'].includes(b.buttonShape) ? b.buttonShape : 'rounded',
+        fill: ['solid','outline','ghost','gradient'].includes(b.buttonFill) ? b.buttonFill : 'solid',
       },
       effects: {
         glass: b.glassEnabled === 'on', glassBlur: b.glassBlur || '16px', glassOpacity: parseFloat(b.glassOpacity) || 1,
