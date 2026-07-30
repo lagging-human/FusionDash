@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'servers' }) %>
+<div class="app-main">
+  <%- include('./_tabs') %>
+  <div class="px-4 sm:px-6 lg:px-8 py-10 max-w-lg mx-auto text-center">
+    <div class="h-10 w-10 rounded-xl bg-red-500/15 flex items-center justify-center mb-4 mx-auto">
+      <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+    </div>
+    <p class="text-sm font-semibold text-white">Pterodactyl didn't respond the way we expected</p>
+    <p class="text-xs text-zinc-500 mt-2"><%= message %></p>
+    <a href="/account/pterodactyl-key?returnTo=<%= encodeURIComponent('/server/' + server.id + '/console') %>" class="inline-block mt-5 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+      Check your connected API key &rarr;
+    </a>
+  </div>
+</div>
+</body>
+</html>

@@ -252,6 +252,7 @@ const migrations = [
     updated_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (locale, key)
   )`,
+  `ALTER TABLE users ADD COLUMN pterodactyl_client_key_enc TEXT`,
 ];
 for (const m of migrations) { try { db.exec(m); } catch {} }
 

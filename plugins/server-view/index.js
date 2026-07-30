@@ -37,7 +37,7 @@ module.exports = {
         : null;
 
       res.render('manage/server', {
-        pageTitle: server.name || 'Server',
+        user: req.user, pageTitle: server.name || 'Server',
         activePage: isOwner ? 'servers' : 'admin',
         server, auditEntries, panelUrl,
       });

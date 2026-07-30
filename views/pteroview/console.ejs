@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'servers' }) %>
+<div class="app-main">
+  <%- include('./_tabs') %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-4 max-w-4xl">
+
+    <div class="flex items-center justify-between gap-x-3 flex-wrap gap-y-2">
+      <div class="flex items-center gap-x-2">
+        <span id="statusDot" class="h-2 w-2 rounded-full bg-zinc-600"></span>
+        <span id="statusLabel" class="text-xs text-zinc-500">Connecting&hellip;</span>
+      </div>
+      <div class="flex gap-x-2">
+        <button onclick="sendPower('start')" class="rounded-lg bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 ring-1 ring-inset ring-green-500/20 hover:bg-green-500/20 transition-colors">Start</button>
+        <button onclick="sendPower('restart')" class="rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20 hover:bg-blue-500/20 transition-colors">Restart</button>
+        <button onclick="sendPower('stop')" class="rounded-lg bg-zinc-500/10 px-3 py-1.5 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-zinc-500/20 hover:bg-zinc-500/20 transition-colors">Stop</button>
+        <button onclick="sendPower('kill')" class="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/20 transition-colors">Kill</button>
+      </div>
+    </div>
+
+    <div id="terminal" class="rounded-2xl border border-white/[0.06] bg-black/60 p-4 h-96 overflow-y-auto font-mono text-[12px] leading-relaxed text-zinc-300 whitespace-pre-wrap break-all"></div>
+
+    <form id="cmdForm" class="flex gap-x-2" onsubmit="return sendCmd(event)">
+      <input id="cmdInput" type="text" placeholder="Type a command and press Enter&hellip;" autocomplete="off"
+        class="flex-1 rounded-lg border-none py-2.5 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono">
+      <button type="submit" class="rounded-lg bg-blue-500/15 px-4 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">Send</button>
+    </form>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  const term = document.getElementById('terminal');
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('statusLabel');
+  let socket = null;
+
+  function log(line) {
+    const stripped = String(line).replace(/\x1b\[[0-9;]*m/g, ''); // strip ANSI color codes
+    const atBottom = term.scrollTop + term.clientHeight >= term.scrollHeight - 20;
+    term.appendChild(document.createTextNode(stripped + '\n'));
+    if (atBottom) term.scrollTop = term.scrollHeight;
+  }
+
+  function setStatus(text, colorClass) {
+    label.textContent = text;
+    dot.className = 'h-2 w-2 rounded-full ' + colorClass;
+  }
+
+  function connect() {
+    <% if (!ws) { %>
+    setStatus('Could not get a console token', 'bg-red-500');
+    log('[FusionDash] Failed to fetch a websocket token from Pterodactyl.');
+    return;
+    <% } %>
+    socket = new WebSocket(<%- JSON.stringify(ws.socket) %>);
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ event: 'auth', args: [<%- JSON.stringify(ws.token) %>] }));
+    };
+    socket.onmessage = (e) => {
+      let msg; try { msg = JSON.parse(e.data); } catch { return; }
+      const { event: ev, args } = msg;
+      if (ev === 'auth success') { setStatus('Connected', 'bg-green-500'); }
+      else if (ev === 'console output') { log(args[0]); }
+      else if (ev === 'status') { setStatus('Server: ' + args[0], args[0] === 'running' ? 'bg-green-500' : 'bg-zinc-500'); }
+      else if (ev === 'token expiring') { /* best-effort — a manual refresh (reload) is fine here */ }
+      else if (ev === 'daemon error') { log('[daemon error] ' + args[0]); }
+    };
+    socket.onerror = () => setStatus('Connection error', 'bg-red-500');
+    socket.onclose = () => setStatus('Disconnected', 'bg-zinc-600');
+  }
+
+  window.sendCmd = function (e) {
+    e.preventDefault();
+    const input = document.getElementById('cmdInput');
+    const cmd = input.value.trim();
+    if (!cmd || !socket || socket.readyState !== 1) return false;
+    socket.send(JSON.stringify({ event: 'send command', args: [cmd] }));
+    log('> ' + cmd);
+    input.value = '';
+    return false;
+  };
+
+  window.sendPower = function (action) {
+    if (!socket || socket.readyState !== 1) return;
+    socket.send(JSON.stringify({ event: 'set state', args: [action] }));
+  };
+
+  connect();
+})();
+</script>
+</body>
+</html>

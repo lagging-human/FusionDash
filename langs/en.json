@@ -14,6 +14,8 @@
   "nav.site_text": "Site Text",
   "nav.email_broadcast": "Email Broadcast",
   "nav.audit_log": "Audit Log",
+  "pteroview.view_button": "View",
+  "currency.name": "Coins",
   "nav.group_servers": "Servers",
   "nav.group_resources": "Resources",
   "nav.group_billing": "Billing",

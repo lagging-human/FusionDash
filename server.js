@@ -2058,7 +2058,7 @@ app.post('/internal/renew-subscriptions', ensureAdmin, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin/lang', ensureAdmin, (req, res) => {
   res.render('admin/lang', {
-    pageTitle: 'Site Text',
+    user: req.user, pageTitle: 'Site Text',
     entries: lang.listAll(lang.DEFAULT_LOCALE),
     locale: lang.DEFAULT_LOCALE,
     success: req.query.success,
@@ -2083,7 +2083,7 @@ app.post('/admin/lang/update', ensureAdmin, (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/admin/plugins', ensureAdmin, (req, res) => {
   res.render('admin/plugins', {
-    pageTitle: 'Plugins',
+    user: req.user, pageTitle: 'Plugins',
     installed: plugins.listInstalled(),
     canRestart: !!process.env.pm_id,
     error: req.query.error, success: req.query.success,

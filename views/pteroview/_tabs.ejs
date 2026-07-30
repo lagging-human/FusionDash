@@ -1,0 +1,12 @@
+<div class="px-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
+  <p class="text-xs text-zinc-500 pt-4"><a href="/servers" class="hover:text-zinc-300 transition-colors">My Servers</a> <span class="text-zinc-700">/ <%= server.name %></span></p>
+  <p class="text-sm font-semibold text-white mt-0.5 mb-3"><%= server.name %></p>
+  <div class="flex gap-x-1 overflow-x-auto -mb-px">
+    <% tabs.forEach(tab => { %>
+    <a href="/server/<%= server.id %>/<%= tab.path %>"
+      class="shrink-0 whitespace-nowrap px-3 py-2 text-xs font-medium border-b-2 transition-colors <%= activeTab === tab.id ? 'border-blue-400 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300' %>">
+      <%= tab.label %>
+    </a>
+    <% }) %>
+  </div>
+</div>

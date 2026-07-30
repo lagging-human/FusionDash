@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'servers' }) %>
+<div class="app-main">
+  <%- include('./_tabs') %>
+
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-3 max-w-4xl">
+
+    <% if (databases.length === 0) { %>
+    <div class="rounded-2xl border border-dashed border-white/[0.08] p-8 text-center">
+      <p class="text-sm text-zinc-500">No databases yet.</p>
+      <p class="text-xs text-zinc-700 mt-1">Create one from the Pterodactyl panel — database creation isn't wired up here yet.</p>
+    </div>
+    <% } %>
+
+    <% databases.forEach(db => { %>
+    <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+      <div class="flex items-start justify-between gap-x-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-white truncate"><%= db.name %></p>
+          <p class="text-xs text-zinc-600 mt-0.5"><%= db.host?.address %>:<%= db.host?.port %></p>
+        </div>
+        <form action="/server/<%= server.id %>/databases/<%= db.id %>/delete" method="POST" onsubmit="return confirm('Delete database <%= db.name %>? This can\'t be undone.')">
+          <button type="submit" class="text-[11px] text-red-400/70 hover:text-red-400 transition-colors shrink-0">Delete</button>
+        </form>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-3 text-xs">
+        <div><p class="text-[10px] text-zinc-600 uppercase tracking-wide">Username</p><p class="text-zinc-300 font-mono mt-0.5"><%= db.username %></p></div>
+        <div><p class="text-[10px] text-zinc-600 uppercase tracking-wide">Connections From</p><p class="text-zinc-300 font-mono mt-0.5"><%= db.connections_from || '%' %></p></div>
+        <% if (db.relationships?.password?.attributes?.password) { %>
+        <div class="col-span-2"><p class="text-[10px] text-zinc-600 uppercase tracking-wide">Password</p><p class="text-zinc-300 font-mono mt-0.5"><%= db.relationships.password.attributes.password %></p></div>
+        <% } %>
+      </div>
+    </div>
+    <% }) %>
+
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'servers' }) %>
+<div class="app-main">
+  <%- include('./_tabs') %>
+
+  <% if (error) { %>
+  <div class="flex gap-x-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <p class="text-sm text-amber-300"><%= error %></p>
+  </div>
+  <% } %>
+  <% if (success) { %>
+  <div class="flex gap-x-3 border-b border-green-500/20 bg-green-500/10 px-4 py-3 sm:px-6 lg:px-8">
+    <p class="text-sm text-green-300"><%= success %></p>
+  </div>
+  <% } %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-4 max-w-4xl">
+
+    <div class="flex items-center gap-x-1.5 text-xs text-zinc-500 flex-wrap">
+      <a href="/server/<%= server.id %>/files?dir=%2F" class="hover:text-zinc-300 transition-colors font-mono">/</a>
+      <%
+        const parts = dir.split('/').filter(Boolean);
+        let acc = '';
+      %>
+      <% parts.forEach((p, i) => { acc += '/' + p; %>
+        <span class="text-zinc-700">/</span>
+        <a href="/server/<%= server.id %>/files?dir=<%= encodeURIComponent(acc) %>" class="hover:text-zinc-300 transition-colors font-mono"><%= p %></a>
+      <% }) %>
+    </div>
+
+    <div class="rounded-2xl border border-white/[0.06] overflow-hidden">
+      <% if (files.length === 0) { %>
+      <p class="text-sm text-zinc-600 px-5 py-8 text-center">Empty directory.</p>
+      <% } %>
+      <div class="divide-y divide-white/[0.04]">
+        <% files.sort((a,b) => (b.is_file===a.is_file?0:a.is_file?1:-1)).forEach(f => { %>
+        <div class="flex items-center justify-between gap-x-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors">
+          <% if (!f.is_file) { %>
+          <a href="/server/<%= server.id %>/files?dir=<%= encodeURIComponent((dir==='/'?'':dir) + '/' + f.name) %>" class="flex items-center gap-x-2.5 min-w-0 flex-1">
+            <svg class="h-4 w-4 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-19.5 0v6a2.25 2.25 0 0 0 2.25 2.25h15a2.25 2.25 0 0 0 2.25-2.25v-6m-19.5 0V6A2.25 2.25 0 0 1 4.5 3.75h4.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H19.5A2.25 2.25 0 0 1 21.75 9v3.75"/></svg>
+            <span class="text-sm text-zinc-300 truncate"><%= f.name %></span>
+          </a>
+          <% } else { %>
+          <a href="/server/<%= server.id %>/files/edit?path=<%= encodeURIComponent((dir==='/'?'':dir) + '/' + f.name) %>" class="flex items-center gap-x-2.5 min-w-0 flex-1">
+            <svg class="h-4 w-4 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+            <span class="text-sm text-zinc-300 truncate hover:text-white transition-colors"><%= f.name %></span>
+            <span class="text-[10px] text-zinc-700 shrink-0"><%= (f.size/1024).toFixed(1) %> KB</span>
+          </a>
+          <% } %>
+          <form action="/server/<%= server.id %>/files/delete" method="POST" onsubmit="return confirm('Delete <%= f.name %>? This can\'t be undone.')">
+            <input type="hidden" name="dir" value="<%= dir %>">
+            <input type="hidden" name="name" value="<%= f.name %>">
+            <button type="submit" class="text-[11px] text-red-400/70 hover:text-red-400 transition-colors shrink-0">Delete</button>
+          </form>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

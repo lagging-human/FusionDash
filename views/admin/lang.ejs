@@ -13,8 +13,7 @@
   <% } %>
 
   <div class="px-4 py-4 sm:px-6 lg:px-8 border-b border-white/[0.06] bg-white/[0.02]">
-    <p class="text-xs text-zinc-500">Admin <span class="text-zinc-700">/ Site Text</span></p>
-    <p class="text-sm font-semibold text-white mt-0.5">Site Text</p>
+    <p class="text-sm font-semibold text-white">Site Text</p>
   </div>
 
   <div class="px-4 sm:px-6 lg:px-8 py-6 pb-24 space-y-4 max-w-3xl">
@@ -34,7 +33,7 @@
           const groupKey = e.key.split('.')[0];
           (groups[groupKey] ||= []).push(e);
         });
-        const groupLabels = { nav: 'Navigation' };
+        const groupLabels = { nav: 'Navigation', currency: 'Currency' };
       %>
       <% Object.keys(groups).forEach(g => { %>
       <div class="rounded-2xl border border-white/[0.06] overflow-hidden">

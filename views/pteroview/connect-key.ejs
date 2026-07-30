@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<%- include('../components/header') %>
+<body>
+<%- include('../components/sidebar', { activePage:'servers' }) %>
+<div class="app-main">
+
+  <% if (typeof server !== 'undefined' && server) { %>
+  <%- include('./_tabs', { tabs: [{id:null,label:'',path:''}], activeTab: null }) %>
+  <% } %>
+
+  <div class="px-4 sm:px-6 lg:px-8 py-10 max-w-lg mx-auto">
+    <% if (error) { %>
+    <div class="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 mb-4">
+      <p class="text-sm text-amber-300"><%= error %></p>
+    </div>
+    <% } %>
+    <% if (success) { %>
+    <div class="rounded-2xl border border-green-500/20 bg-green-500/[0.06] p-4 mb-4">
+      <p class="text-sm text-green-300"><%= success %></p>
+    </div>
+    <% } %>
+
+    <div class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6">
+      <div class="h-10 w-10 rounded-xl bg-blue-500/15 flex items-center justify-center mb-4">
+        <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 0 1 21.75 8.25Z"/></svg>
+      </div>
+      <p class="text-base font-semibold text-white">Connect your Pterodactyl account</p>
+      <p class="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+        Console, files, databases, and subusers need your own Pterodactyl <strong class="text-zinc-300">Client API</strong> key — one-time setup, stored encrypted.
+      </p>
+      <ol class="text-xs text-zinc-500 mt-4 space-y-1.5 list-decimal list-inside">
+        <li>Open your Pterodactyl panel &rarr; Account Settings &rarr; API Credentials</li>
+        <li>Create a new API key (any description works)</li>
+        <li>Paste it below</li>
+      </ol>
+
+      <form action="/account/pterodactyl-key" method="POST" class="mt-5 space-y-3">
+        <input type="hidden" name="returnTo" value="<%= returnTo %>">
+        <input type="text" name="apiKey" placeholder="ptlc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off"
+          class="block w-full rounded-lg border-none py-2.5 pl-3 bg-zinc-900 text-white ring-1 ring-inset ring-zinc-700 focus:ring-blue-400 text-sm font-mono placeholder:text-zinc-700">
+        <button type="submit" class="w-full rounded-full bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/30 hover:bg-blue-500/25 transition-colors">
+          Connect
+        </button>
+      </form>
+
+      <% if (connected) { %>
+      <form action="/account/pterodactyl-key/remove" method="POST" class="mt-3" onsubmit="return confirm('Disconnect your Pterodactyl account? Console/files/databases access will stop working until you reconnect.')">
+        <button type="submit" class="w-full rounded-full bg-red-500/10 px-5 py-2 text-xs font-semibold text-red-400 ring-1 ring-inset ring-red-500/20 hover:bg-red-500/20 transition-colors">
+          Disconnect
+        </button>
+      </form>
+      <% } %>
+    </div>
+
+    <p class="text-[11px] text-zinc-700 mt-4 text-center">Your key is encrypted at rest and only ever used server-side to act on your behalf.</p>
+  </div>
+</div>
+</body>
+</html>

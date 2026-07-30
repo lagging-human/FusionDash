@@ -18,8 +18,14 @@
  * toggle takes effect live.
  *
  * Plugin folder shape:
- *   /plugins/<slug>/plugin.json   { name, version, description, author }
- *   /plugins/<slug>/index.js      module.exports = { register(api) { ... } }
+ *   /plugins/<folder>/manifest.json  { pluginName, pluginId, description, author, version, status }
+ *   /plugins/<folder>/index.js       module.exports = { register(api) { ... } }
+ *
+ * `status` in the manifest is just the plugin author's shipped-default intent
+ * (new plugins should ship "disabled" so nothing self-activates without an
+ * admin opting in). The actual on/off switch is always the `enabled_plugins`
+ * DB setting below, keyed by folder name — that's what the toggle on the
+ * admin Plugins page flips, and what decides what loads at boot.
  */
 const fs = require('fs');
 const path = require('path');
@@ -40,9 +46,9 @@ function setEnabledSlugs(slugs) {
     .run(JSON.stringify(slugs));
 }
 
-function readManifest(slug) {
+function readManifest(folderName) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(PLUGINS_DIR, slug, 'plugin.json'), 'utf8'));
+    return JSON.parse(fs.readFileSync(path.join(PLUGINS_DIR, folderName, 'manifest.json'), 'utf8'));
   } catch {
     return {};
   }
@@ -53,15 +59,17 @@ function listInstalled() {
   if (!fs.existsSync(PLUGINS_DIR)) return [];
   const enabled = getEnabledSlugs();
   return fs.readdirSync(PLUGINS_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory() && fs.existsSync(path.join(PLUGINS_DIR, d.name, 'plugin.json')))
+    .filter(d => d.isDirectory() && fs.existsSync(path.join(PLUGINS_DIR, d.name, 'manifest.json')))
     .map(d => {
       const m = readManifest(d.name);
       return {
-        slug: d.name,
-        name: m.name || d.name,
+        slug: d.name,                        // operational id — folder name, used in URLs/toggle
+        pluginId: m.pluginId || d.name,       // manifest-declared id — display only
+        name: m.pluginName || d.name,
         description: m.description || '',
         version: m.version || '0.0.0',
         author: m.author || 'Unknown',
+        shippedStatus: m.status || 'disabled',
         enabled: enabled.includes(d.name),
         hasIndex: fs.existsSync(path.join(PLUGINS_DIR, d.name, 'index.js')),
       };

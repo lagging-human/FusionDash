@@ -166,7 +166,7 @@
                     <span class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400">Suspended</span>
                     <form action="/servers/<%= server.id %>/renew" method="POST" class="inline">
                       <button type="submit" class="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-500/15 transition-colors">
-                        Renew (<%= renewal.price %> coins)
+                        Renew (<%= renewal.price %> <%= t('currency.name','Coins') %>)
                       </button>
                     </form>
                   <% } else if (renewalOverdue) { %>

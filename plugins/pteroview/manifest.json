@@ -1,0 +1,8 @@
+{
+  "pluginName": "Pterodactyl View",
+  "pluginId": "pteroview",
+  "description": "Lets users manage their server from the Dashboard without logging into the Pterodactyl panel directly — console, files, databases, subusers, settings, startup variables, and audit log. Requires each user to connect their own Pterodactyl Client API key once (Application API key alone can't do this).",
+  "author": "FusionDash",
+  "version": "1.0.0",
+  "status": "disabled"
+}
