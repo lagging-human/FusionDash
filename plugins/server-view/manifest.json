@@ -1,8 +1,0 @@
-{
-  "pluginName": "Server View",
-  "pluginId": "server-view",
-  "description": "Adds a View button to server cards. Opens a details page with server info and its audit history, plus a link into the real Pterodactyl panel.",
-  "author": "FusionDash",
-  "version": "1.0.0",
-  "status": "disabled"
-}
