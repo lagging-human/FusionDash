@@ -175,10 +175,6 @@ function ensureAdmin(req, res, next) {
   res.status(403).render('error', { message: 'Admin access required.', pageTitle: 'Error' });
 }
 
-// Plugins — boot-time only (see plugins.js header comment for why). Must run
-// after ensureAuth/ensureAdmin/audit/icon exist, and before any catch-all.
-plugins.loadEnabledPlugins(app, { db, ptero, ensureAuth, ensureAdmin, audit, icon });
-
 // Refresh session user from DB on every request so coins/resources are current
 app.use((req, res, next) => {
   if (req.isAuthenticated()) req.user = getUser.get(req.user.id) || req.user;
@@ -202,6 +198,12 @@ app.use((req, res, next) => {
   next();
 
 });
+
+// Plugins — boot-time only (see plugins.js header comment for why). Must run
+// after the res.locals middleware above so appName/icon/t/theme are populated
+// before any plugin route executes (that ordering was the bug — plugin routes
+// were registering earlier in the stack than this middleware).
+plugins.loadEnabledPlugins(app, { db, ptero, ensureAuth, ensureAdmin, audit, icon });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public
